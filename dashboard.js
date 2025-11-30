@@ -3,12 +3,14 @@ import { state } from './state.js';
 import { els, formatDate, getIconForHistory, getPlaceholderImage, getTickImg, getUserInitials, getUserLevel, uploadToCloudinary, getTodayIST, logUserActivity } from './utils.js';
 import { refreshUserData } from './app.js';
 
+// --- DASHBOARD CORE ---
+
 export const loadDashboardData = async () => {
     try {
         const userId = state.currentUser.id;
         const todayIST = getTodayIST(); 
 
-        // Optimization: Use Promise.all for parallel fetching
+        // Use maybeSingle() to prevent 406 error on new users
         const [
             { data: checkinData },
             { data: streakData },
@@ -16,7 +18,7 @@ export const loadDashboardData = async () => {
         ] = await Promise.all([
             supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', todayIST).limit(1),
             supabase.from('user_streaks').select('current_streak').eq('user_id', userId).single(),
-            supabase.from('user_impact').select('*').eq('user_id', userId).single()
+            supabase.from('user_impact').select('*').eq('user_id', userId).maybeSingle()
         ]);
         
         state.currentUser.isCheckedInToday = (checkinData && checkinData.length > 0);
@@ -30,25 +32,17 @@ export const loadDashboardData = async () => {
 
 export const renderDashboard = () => {
     if (!state.currentUser) return; 
-    
-    // Log View (Once per session/load, or debounced could be better, but this is fine for now)
-    // We put this here to ensure it logs when the user actually sees the dashboard
-    if (document.getElementById('dashboard').classList.contains('active')) {
-        // Optional: Add a simple check to avoid spamming log on every re-render
-    }
-
     renderDashboardUI();
     renderCheckinButtonState();
+    initAQI(); // Initialize AQI card
 };
 
 const renderDashboardUI = () => {
     const user = state.currentUser;
     
-    // Update Header Points
     if(els.userPointsHeader) els.userPointsHeader.textContent = user.current_points;
     if(els.userNameGreeting) els.userNameGreeting.textContent = user.full_name;
     
-    // Update Sidebar Elements (Both Mobile & Desktop exist in DOM now)
     const sidebarName = document.getElementById('user-name-sidebar');
     const sidebarPoints = document.getElementById('user-points-sidebar');
     const sidebarLevel = document.getElementById('user-level-sidebar');
@@ -66,7 +60,6 @@ const renderDashboardUI = () => {
         sidebarAvatar.src = user.profile_img_url || getPlaceholderImage('80x80', getUserInitials(user.full_name));
     }
 
-    // Impact Stats
     const impactRecycled = document.getElementById('impact-recycled');
     const impactCo2 = document.getElementById('impact-co2');
     const impactEvents = document.getElementById('impact-events');
@@ -85,7 +78,7 @@ const renderCheckinButtonState = () => {
     if(postEl) postEl.textContent = streak;
     
     const btn = els.dailyCheckinBtn;
-    if (!btn) return;
+    if (!btn) return; // Guard clause in case button isn't in DOM
 
     if (state.currentUser.isCheckedInToday) {
         btn.classList.add('checkin-completed'); 
@@ -98,99 +91,94 @@ const renderCheckinButtonState = () => {
     }
 };
 
-export const openCheckinModal = () => {
-    if (state.currentUser.isCheckedInToday) return;
-    
-    // Log Interaction
-    logUserActivity('ui_interaction', 'Opened check-in modal');
+// --- AQI LOGIC ---
 
-    const checkinModal = document.getElementById('checkin-modal');
-    checkinModal.classList.add('open');
-    checkinModal.classList.remove('invisible', 'opacity-0');
-    
-    const calendarContainer = document.getElementById('checkin-modal-calendar');
-    calendarContainer.innerHTML = '';
-    
-    // Visual Calendar (Local Time for display is fine, creates better UX)
-    const today = new Date(); 
-    
-    for (let i = -3; i <= 3; i++) {
-        const d = new Date(today);
-        d.setDate(today.getDate() + i);
-        const isToday = i === 0;
-        
-        calendarContainer.innerHTML += `
-            <div class="flex flex-col items-center text-xs ${isToday ? 'font-bold text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}">
-                <span class="mb-1">${['S','M','T','W','T','F','S'][d.getDay()]}</span>
-                <span class="w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-yellow-100 dark:bg-yellow-900' : ''}">${d.getDate()}</span>
-            </div>
-        `;
-    }
-    document.getElementById('checkin-modal-streak').textContent = `${state.currentUser.checkInStreak || 0} Days`;
-    document.getElementById('checkin-modal-button-container').innerHTML = `
-        <button onclick="handleDailyCheckin()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 shadow-lg transition-transform active:scale-95">
-            Check-in &amp; Earn ${state.checkInReward} Points
-        </button>
-    `;
-};
+const initAQI = () => {
+    const card = document.getElementById('dashboard-aqi-card');
+    if (!card) return;
 
-export const closeCheckinModal = () => {
-    const checkinModal = document.getElementById('checkin-modal');
-    checkinModal.classList.remove('open');
-    checkinModal.classList.add('invisible', 'opacity-0');
-};
-
-export const handleDailyCheckin = async () => {
-    const checkinButton = document.querySelector('#checkin-modal-button-container button');
-    if(checkinButton) {
-        checkinButton.disabled = true;
-        checkinButton.textContent = 'Checking in...';
-    }
-
-    const optimisticStreak = (state.currentUser.checkInStreak || 0) + 1;
-
-    try {
-        const todayIST = getTodayIST();
-
-        const { error } = await supabase.from('daily_checkins').insert({ 
-            user_id: state.currentUser.id, 
-            points_awarded: state.checkInReward,
-            checkin_date: todayIST 
-        });
-        
-        if (error) throw error;
-
-        // Log Success
-        logUserActivity('checkin_success', `Daily check-in completed. Streak: ${optimisticStreak}`);
-
-        closeCheckinModal();
-
-        // Optimistic Update
-        state.currentUser.checkInStreak = optimisticStreak;
-        state.currentUser.isCheckedInToday = true;
-        state.currentUser.current_points += state.checkInReward; // Optimistic points add
-        
-        renderCheckinButtonState();
-        renderDashboardUI(); // Update points immediately
-
-        // Background sync to ensure consistency
-        await refreshUserData(); 
-
-    } catch (err) {
-        console.error('Check-in error:', err.message);
-        logUserActivity('checkin_error', err.message);
-        alert(`Failed to check in: ${err.message}`);
-        
-        if(checkinButton) {
-            checkinButton.disabled = false;
-            checkinButton.textContent = `Check-in & Earn ${state.checkInReward} Points`;
+    // Only try to fetch if we haven't already (or if we want to refresh, logic can go here)
+    if (card.innerHTML.trim() === "") {
+        if (navigator.geolocation) {
+            card.classList.remove('hidden');
+            card.innerHTML = `
+                <div class="glass-card p-4 rounded-xl flex items-center justify-center">
+                    <i data-lucide="loader-2" class="w-5 h-5 animate-spin text-gray-400 mr-2"></i>
+                    <span class="text-sm text-gray-500">Detecting Air Quality...</span>
+                </div>`;
+            
+            navigator.geolocation.getCurrentPosition(
+                (position) => fetchAQI(position.coords.latitude, position.coords.longitude),
+                (error) => {
+                    console.warn("AQI Location Error:", error);
+                    card.innerHTML = `
+                        <div class="glass-card p-4 rounded-xl text-center">
+                            <p class="text-sm text-gray-500">Enable location to see local Air Quality.</p>
+                        </div>`;
+                }
+            );
         }
     }
 };
 
+const fetchAQI = async (lat, lon) => {
+    const card = document.getElementById('dashboard-aqi-card');
+    try {
+        const response = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
+        const data = await response.json();
+        const aqi = data.current.us_aqi;
+        
+        renderAQICard(card, aqi);
+    } catch (err) {
+        console.error("AQI Fetch Error:", err);
+        card.classList.add('hidden');
+    }
+};
+
+const renderAQICard = (card, aqi) => {
+    let status = 'Good';
+    let colorClass = 'from-green-100 to-emerald-50 dark:from-green-900/40 dark:to-emerald-900/20 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800';
+    let icon = 'wind';
+    let advice = "Great day for a nature walk on campus!";
+
+    if (aqi > 50 && aqi <= 100) {
+        status = 'Moderate';
+        colorClass = 'from-yellow-100 to-orange-50 dark:from-yellow-900/40 dark:to-orange-900/20 text-yellow-800 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800';
+        icon = 'cloud';
+        advice = "Air is okay. Good for saving energy indoors.";
+    } else if (aqi > 100) {
+        status = 'Unhealthy';
+        colorClass = 'from-red-100 to-rose-50 dark:from-red-900/40 dark:to-rose-900/20 text-red-800 dark:text-red-300 border-red-200 dark:border-red-800';
+        icon = 'alert-triangle';
+        advice = "High pollution. Wear a mask if outside!";
+    }
+
+    card.innerHTML = `
+        <div class="bg-gradient-to-br ${colorClass} border p-5 rounded-2xl shadow-sm relative overflow-hidden animate-breathe">
+            <div class="relative z-10 flex justify-between items-start">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-wider opacity-70 mb-1">Air Quality Index</p>
+                    <h3 class="text-3xl font-black flex items-center gap-2">
+                        ${aqi} <span class="text-lg font-medium opacity-80">(${status})</span>
+                    </h3>
+                    <p class="text-sm font-medium mt-2 opacity-90">${advice}</p>
+                </div>
+                <div class="w-12 h-12 rounded-full bg-white/40 dark:bg-black/20 flex items-center justify-center backdrop-blur-sm">
+                    <i data-lucide="${icon}" class="w-6 h-6"></i>
+                </div>
+            </div>
+            <div class="absolute -bottom-4 -right-4 w-24 h-24 bg-white/20 dark:bg-white/5 rounded-full blur-xl"></div>
+            <div class="absolute -top-4 -left-4 w-20 h-20 bg-white/20 dark:bg-white/5 rounded-full blur-xl"></div>
+        </div>
+    `;
+    if(window.lucide) window.lucide.createIcons();
+};
+
+// --- HISTORY & PROFILE (These were missing!) ---
+
 export const loadHistoryData = async () => {
     try {
-        // Optimization: Limit to last 20 items for performance
+        // Optimization: Limit to last 20 items
         const { data, error } = await supabase
             .from('points_ledger')
             .select('*')
@@ -235,7 +223,6 @@ export const renderProfile = () => {
     const u = state.currentUser;
     if (!u) return;
     
-    // Log View
     logUserActivity('view_profile', 'Viewed profile page');
 
     const l = getUserLevel(u.lifetime_points);
@@ -270,35 +257,28 @@ export const renderProfile = () => {
 export const setupFileUploads = () => {
     const profileInput = document.getElementById('profile-upload-input');
     if (profileInput) {
-        // Remove existing listener to avoid duplicates if re-initialized
         const newProfileInput = profileInput.cloneNode(true);
         profileInput.parentNode.replaceChild(newProfileInput, profileInput);
 
         newProfileInput.addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            
             const avatarEl = document.getElementById('profile-avatar');
             const originalSrc = avatarEl.src;
             avatarEl.style.opacity = '0.5';
             
             try {
-                // Log Start
                 logUserActivity('upload_profile_pic_start', 'Started uploading profile picture');
-                
                 const imageUrl = await uploadToCloudinary(file);
                 const { error } = await supabase.from('users').update({ profile_img_url: imageUrl }).eq('id', state.currentUser.id);
                 if (error) throw error;
                 
                 state.currentUser.profile_img_url = imageUrl;
-                
-                // Update Sidebar avatar immediately too
                 const sidebarAvatar = document.getElementById('user-avatar-sidebar');
                 if(sidebarAvatar) sidebarAvatar.src = imageUrl;
 
                 renderProfile();
                 renderDashboardUI(); 
-                
                 alert('Profile picture updated!');
                 logUserActivity('upload_profile_pic_success', 'Profile picture updated');
 
@@ -315,6 +295,83 @@ export const setupFileUploads = () => {
     }
 };
 
+export const openCheckinModal = () => {
+    if (state.currentUser.isCheckedInToday) return;
+    logUserActivity('ui_interaction', 'Opened check-in modal');
+    const checkinModal = document.getElementById('checkin-modal');
+    checkinModal.classList.add('open');
+    checkinModal.classList.remove('invisible', 'opacity-0');
+    
+    const calendarContainer = document.getElementById('checkin-modal-calendar');
+    calendarContainer.innerHTML = '';
+    
+    const today = new Date(); 
+    for (let i = -3; i <= 3; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        const isToday = i === 0;
+        
+        calendarContainer.innerHTML += `
+            <div class="flex flex-col items-center text-xs ${isToday ? 'font-bold text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}">
+                <span class="mb-1">${['S','M','T','W','T','F','S'][d.getDay()]}</span>
+                <span class="w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-yellow-100 dark:bg-yellow-900' : ''}">${d.getDate()}</span>
+            </div>`;
+    }
+    document.getElementById('checkin-modal-streak').textContent = `${state.currentUser.checkInStreak || 0} Days`;
+    document.getElementById('checkin-modal-button-container').innerHTML = `
+        <button onclick="handleDailyCheckin()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 shadow-lg transition-transform active:scale-95">
+            Check-in &amp; Earn ${state.checkInReward} Points
+        </button>`;
+};
+
+export const closeCheckinModal = () => {
+    const checkinModal = document.getElementById('checkin-modal');
+    checkinModal.classList.remove('open');
+    checkinModal.classList.add('invisible', 'opacity-0');
+};
+
+export const handleDailyCheckin = async () => {
+    const checkinButton = document.querySelector('#checkin-modal-button-container button');
+    if(checkinButton) {
+        checkinButton.disabled = true;
+        checkinButton.textContent = 'Checking in...';
+    }
+
+    const optimisticStreak = (state.currentUser.checkInStreak || 0) + 1;
+
+    try {
+        const todayIST = getTodayIST();
+        const { error } = await supabase.from('daily_checkins').insert({ 
+            user_id: state.currentUser.id, 
+            points_awarded: state.checkInReward,
+            checkin_date: todayIST 
+        });
+        
+        if (error) throw error;
+        logUserActivity('checkin_success', `Daily check-in completed. Streak: ${optimisticStreak}`);
+        closeCheckinModal();
+
+        state.currentUser.checkInStreak = optimisticStreak;
+        state.currentUser.isCheckedInToday = true;
+        state.currentUser.current_points += state.checkInReward; 
+        
+        renderCheckinButtonState();
+        renderDashboardUI();
+        await refreshUserData(); 
+
+    } catch (err) {
+        console.error('Check-in error:', err.message);
+        logUserActivity('checkin_error', err.message);
+        alert(`Failed to check in: ${err.message}`);
+        
+        if(checkinButton) {
+            checkinButton.disabled = false;
+            checkinButton.textContent = `Check-in & Earn ${state.checkInReward} Points`;
+        }
+    }
+};
+
+// Exports attached to window for inline HTML events
 window.openCheckinModal = openCheckinModal;
 window.closeCheckinModal = closeCheckinModal;
 window.handleDailyCheckin = handleDailyCheckin;
