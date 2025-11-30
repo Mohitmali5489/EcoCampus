@@ -18,7 +18,6 @@ export const loadStoreAndProductData = async () => {
             `).eq('is_active', true);
         if (error) throw error;
 
-        // Process Products
         state.products = data.map(p => ({
             ...p, 
             images: p.product_images?.sort((a,b) => a.sort_order - b.sort_order).map(img => img.image_url) || [],
@@ -29,7 +28,6 @@ export const loadStoreAndProductData = async () => {
             popularity: Math.floor(Math.random() * 50) 
         }));
 
-        // Extract Unique Stores
         const storeMap = new Map();
         state.products.forEach(p => {
             if (p.stores && !storeMap.has(p.stores.id)) {
@@ -50,16 +48,20 @@ export const loadStoreAndProductData = async () => {
     } catch (err) { console.error('Product Load Error:', err); }
 };
 
-// 2. Render Rewards (With Store Search)
+// 2. Render Rewards (Two Sections: Stores & Products)
 export const renderRewards = () => {
-    els.productGrid.innerHTML = '';
+    const container = els.productGrid;
+    container.innerHTML = '';
     
+    // Change layout from Grid to Vertical Stack
+    container.className = "flex flex-col gap-8 pb-10";
+
     // --- SEARCH LOGIC ---
     const searchTerm = els.storeSearch.value.toLowerCase();
     els.storeSearchClear.classList.toggle('hidden', !searchTerm);
 
     // Filter Stores
-    let matchingStores = [];
+    let matchingStores = state.stores;
     if (searchTerm.length > 0) {
         matchingStores = state.stores.filter(s => s.name.toLowerCase().includes(searchTerm));
     }
@@ -82,58 +84,86 @@ export const renderRewards = () => {
         }
     });
 
-    // Update Grid Class for Responsiveness
-    els.productGrid.className = "grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4";
-
-    // --- RENDER STORES (If Searching) ---
+    // --- SECTION 1: STORES (Horizontal Scroll) ---
     if (matchingStores.length > 0) {
-        els.productGrid.innerHTML += `
-            <div class="col-span-2 md:col-span-3 lg:col-span-4 mb-2">
-                <h3 class="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Matching Stores</h3>
-                <div class="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
-                    ${matchingStores.map(s => `
-                        <div onclick="openStorePage('${s.id}')" class="flex-shrink-0 flex items-center p-3 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-sm active:scale-95 transition-transform cursor-pointer min-w-[160px]">
-                            <img src="${s.logo_url || getPlaceholderImage('40x40')}" class="w-10 h-10 rounded-full border border-gray-100 dark:border-gray-600 mr-3">
-                            <div>
-                                <p class="font-bold text-gray-900 dark:text-white text-sm line-clamp-1">${s.name}</p>
-                                <p class="text-xs text-gray-500 dark:text-gray-400">${s.itemCount} Items</p>
-                            </div>
+        const storesSection = document.createElement('div');
+        storesSection.className = "w-full";
+        storesSection.innerHTML = `
+            <div class="flex items-center justify-between mb-4 px-1">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="store" class="w-5 h-5 text-brand-500"></i> Browse Stores
+                </h3>
+            </div>
+            <div class="flex gap-4 overflow-x-auto pb-4 no-scrollbar snap-x px-1">
+                ${matchingStores.map(s => `
+                    <div onclick="openStorePage('${s.id}')" class="flex-shrink-0 w-40 snap-start bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 p-4 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer active:scale-95 group">
+                        <div class="w-16 h-16 mx-auto bg-gray-50 dark:bg-gray-700 rounded-full flex items-center justify-center mb-3 border border-gray-100 dark:border-gray-600 group-hover:border-brand-200 transition-colors overflow-hidden">
+                            <img src="${s.logo_url || getPlaceholderImage('64x64')}" class="w-full h-full object-cover">
                         </div>
-                    `).join('')}
-                </div>
+                        <div class="text-center">
+                            <h4 class="font-bold text-sm text-gray-900 dark:text-white truncate mb-1">${s.name}</h4>
+                            <p class="text-xs text-gray-500 dark:text-gray-400 font-medium">${s.itemCount} Items</p>
+                        </div>
+                    </div>
+                `).join('')}
             </div>
         `;
+        container.appendChild(storesSection);
     }
 
-    // --- RENDER PRODUCTS ---
-    if (products.length === 0 && matchingStores.length === 0) { 
-        els.productGrid.innerHTML = `<p class="text-sm text-center text-gray-500 col-span-2 md:col-span-3 lg:col-span-4 py-8">No matches found.</p>`; 
-        return; 
-    }
-
-    products.forEach(p => {
-        const imageUrl = (p.images && p.images[0]) ? p.images[0] : getPlaceholderImage('300x225');
-        els.productGrid.innerHTML += `
-            <div class="w-full flex-shrink-0 glass-card border border-gray-200/60 dark:border-gray-700/80 rounded-2xl overflow-hidden flex flex-col cursor-pointer active:scale-95 transition-transform hover:shadow-md" onclick="showProductDetailPage('${p.id}')">
-                <img src="${imageUrl}" class="w-full h-40 object-cover" onerror="this.src='${getPlaceholderImage('300x225')}'" loading="lazy">
-                <div class="p-3 flex flex-col flex-grow">
-                    <div class="flex items-center mb-1">
-                        <img src="${p.storeLogo || getPlaceholderImage('40x40')}" class="w-5 h-5 rounded-full mr-2 border dark:border-gray-600">
-                        <p class="text-xs font-medium text-gray-600 dark:text-gray-400 truncate">${p.storeName}</p>
-                    </div>
-                    <p class="font-bold text-gray-800 dark:text-gray-100 text-sm truncate mt-1">${p.name}</p>
-                    <div class="mt-auto pt-2">
-                        <p class="text-xs text-gray-400 dark:text-gray-500 line-through">₹${p.original_price}</p>
-                        <div class="flex items-center font-bold text-gray-800 dark:text-gray-100 my-1">
-                            <span class="text-md text-green-700 dark:text-green-400">₹${p.discounted_price}</span>
-                            <span class="mx-1 text-gray-400 dark:text-gray-500 text-xs">+</span>
-                            <i data-lucide="leaf" class="w-3 h-3 text-green-500 mr-1"></i>
-                            <span class="text-sm text-green-700 dark:text-green-400">${p.ecopoints_cost}</span>
+    // --- SECTION 2: PRODUCTS (Grid) ---
+    if (products.length > 0) {
+        const productsSection = document.createElement('div');
+        productsSection.className = "w-full";
+        
+        // Generate Product Cards HTML
+        const productsHTML = products.map(p => {
+            const imageUrl = (p.images && p.images[0]) ? p.images[0] : getPlaceholderImage('300x225');
+            return `
+                <div class="w-full flex-shrink-0 glass-card border border-gray-200/60 dark:border-gray-700/80 rounded-2xl overflow-hidden flex flex-col cursor-pointer active:scale-95 transition-transform hover:shadow-md bg-white dark:bg-gray-800" onclick="showProductDetailPage('${p.id}')">
+                    <div class="relative">
+                        <img src="${imageUrl}" class="w-full h-36 object-cover bg-gray-100 dark:bg-gray-700" onerror="this.src='${getPlaceholderImage('300x225')}'" loading="lazy">
+                        <div class="absolute top-2 right-2 bg-white/90 dark:bg-black/60 backdrop-blur-sm px-2 py-1 rounded-lg flex items-center gap-1">
+                            <i data-lucide="leaf" class="w-3 h-3 text-green-500 fill-current"></i>
+                            <span class="text-xs font-bold text-green-700 dark:text-green-400">${p.ecopoints_cost}</span>
                         </div>
                     </div>
-                </div>
-            </div>`;
-    });
+                    <div class="p-3 flex flex-col flex-grow">
+                        <div class="flex items-center mb-1">
+                            <img src="${p.storeLogo || getPlaceholderImage('20x20')}" class="w-4 h-4 rounded-full mr-1.5 border dark:border-gray-600 object-cover">
+                            <p class="text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide truncate">${p.storeName}</p>
+                        </div>
+                        <p class="font-bold text-gray-800 dark:text-gray-100 text-sm leading-tight mb-2 line-clamp-2">${p.name}</p>
+                        <div class="mt-auto flex items-center justify-between border-t border-gray-100 dark:border-gray-700 pt-2">
+                            <span class="text-xs text-gray-400 dark:text-gray-500 line-through">₹${p.original_price}</span>
+                            <span class="text-sm font-black text-gray-900 dark:text-white">₹${p.discounted_price}</span>
+                        </div>
+                    </div>
+                </div>`;
+        }).join('');
+
+        productsSection.innerHTML = `
+            <div class="flex items-center justify-between mb-4 px-1">
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                    <i data-lucide="gift" class="w-5 h-5 text-purple-500"></i> All Rewards
+                </h3>
+            </div>
+            <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                ${productsHTML}
+            </div>
+        `;
+        container.appendChild(productsSection);
+    }
+
+    // Empty State
+    if (products.length === 0 && matchingStores.length === 0) { 
+        container.innerHTML = `
+            <div class="flex flex-col items-center justify-center py-20 opacity-60">
+                <i data-lucide="search-x" class="w-12 h-12 text-gray-300 mb-3"></i>
+                <p class="text-sm font-medium text-gray-500">No matches found.</p>
+            </div>`; 
+    }
+
     if(window.lucide) window.lucide.createIcons();
 };
 
@@ -142,7 +172,6 @@ export const openStorePage = (storeId) => {
     const store = getStore(storeId);
     if (!store) return;
     
-    // Log Activity
     logUserActivity('view_store', `Visited store: ${store.name}`, { storeId });
 
     const storeProducts = state.products.filter(p => p.store_id === storeId);
@@ -316,10 +345,6 @@ export const confirmPurchase = async (productId) => {
     try {
         const product = getProduct(productId);
         if (!product || state.currentUser.current_points < product.ecopoints_cost) { alert("You do not have enough points."); return; }
-        
-        // Log Activity
-        logUserActivity('purchase_attempt', `Attempting to buy ${product.name}`, { productId, cost: product.ecopoints_cost });
-
         const confirmBtn = document.getElementById('confirm-purchase-btn');
         confirmBtn.disabled = true; confirmBtn.textContent = 'Processing...';
         
@@ -332,17 +357,10 @@ export const confirmPurchase = async (productId) => {
         const { error: confirmError } = await supabase.from('orders').update({ status: 'confirmed' }).eq('id', orderData.id);
         if (confirmError) throw confirmError;
         
-        // Log Success
-        logUserActivity('purchase_success', `Bought ${product.name}`, { orderId: orderData.id });
-
         closePurchaseModal();
         await Promise.all([refreshUserData(), loadUserRewardsData()]);
         window.showPage('my-rewards');
-    } catch (err) { 
-        console.error('Purchase Failed:', err); 
-        logUserActivity('purchase_error', err.message);
-        alert(`Purchase failed: ${err.message}`); 
-    }
+    } catch (err) { console.error('Purchase Failed:', err); alert(`Purchase failed: ${err.message}`); }
 };
 
 // 6. My Rewards
@@ -360,19 +378,11 @@ export const loadUserRewardsData = async () => {
 
 export const renderMyRewardsPage = () => {
     els.allRewardsList.innerHTML = '';
-    
-    // Add grid class for desktop
     els.allRewardsList.className = "space-y-4 max-w-3xl mx-auto md:grid md:grid-cols-2 md:space-y-0 md:gap-4";
 
     if (state.userRewards.length === 0) { 
         els.allRewardsList.className = "flex flex-col items-center justify-center py-12 opacity-60 w-full";
-        els.allRewardsList.innerHTML = `
-            <div class="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4">
-                <i data-lucide="shopping-bag" class="w-8 h-8 text-gray-400"></i>
-            </div>
-            <p class="text-sm font-medium text-gray-500 dark:text-gray-400">No orders yet.</p>
-            <button onclick="showPage('rewards')" class="mt-4 text-brand-600 font-bold text-sm hover:underline">Visit Store</button>
-        `; 
+        els.allRewardsList.innerHTML = `<div class="w-16 h-16 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mb-4"><i data-lucide="shopping-bag" class="w-8 h-8 text-gray-400"></i></div><p class="text-sm font-medium text-gray-500 dark:text-gray-400">No orders yet.</p><button onclick="showPage('rewards')" class="mt-4 text-brand-600 font-bold text-sm hover:underline">Visit Store</button>`; 
         if(window.lucide) window.lucide.createIcons();
         return; 
     }
@@ -384,18 +394,11 @@ export const renderMyRewardsPage = () => {
         
         if (isConfirmed) {
             statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 uppercase tracking-wide">Ready</span>`;
-            actionButton = `
-                <button onclick="openRewardQrModal('${ur.userRewardId}')" class="flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-4 py-2.5 rounded-xl shadow-lg shadow-gray-200 dark:shadow-none active:scale-95 transition-all w-full mt-3 group">
-                    <i data-lucide="qr-code" class="w-4 h-4 group-hover:scale-110 transition-transform"></i>
-                    <span class="text-xs font-bold">Show QR Code</span>
-                </button>`;
+            actionButton = `<button onclick="openRewardQrModal('${ur.userRewardId}')" class="flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-4 py-2.5 rounded-xl shadow-lg shadow-gray-200 dark:shadow-none active:scale-95 transition-all w-full mt-3 group"><i data-lucide="qr-code" class="w-4 h-4 group-hover:scale-110 transition-transform"></i><span class="text-xs font-bold">Show QR Code</span></button>`;
         } else {
             const color = ur.status === 'pending' ? 'yellow' : 'red';
             statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-${color}-100 text-${color}-700 dark:bg-${color}-900/40 dark:text-${color}-400 uppercase tracking-wide">${ur.status}</span>`;
-            actionButton = `
-                <button disabled class="flex items-center justify-center gap-2 bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 px-4 py-2.5 rounded-xl w-full mt-3 cursor-not-allowed">
-                    <span class="text-xs font-bold">Processing...</span>
-                </button>`;
+            actionButton = `<button disabled class="flex items-center justify-center gap-2 bg-gray-100 dark:bg-gray-700 text-gray-400 dark:text-gray-500 px-4 py-2.5 rounded-xl w-full mt-3 cursor-not-allowed"><span class="text-xs font-bold">Processing...</span></button>`;
         }
 
         els.allRewardsList.innerHTML += `
@@ -411,8 +414,7 @@ export const renderMyRewardsPage = () => {
                 </div>
                 <div class="relative mt-4 mb-1"><div class="absolute left-0 right-0 top-1/2 border-t border-dashed border-gray-300 dark:border-gray-600"></div><div class="absolute -left-6 top-1/2 -translate-y-1/2 w-4 h-4 bg-gray-50 dark:bg-gray-900 rounded-full"></div><div class="absolute -right-6 top-1/2 -translate-y-1/2 w-4 h-4 bg-gray-50 dark:bg-gray-900 rounded-full"></div></div>
                 <div class="pt-1 relative z-10">${actionButton}</div>
-            </div>
-        `;
+            </div>`;
     });
     if(window.lucide) window.lucide.createIcons();
 };
@@ -420,12 +422,8 @@ export const renderMyRewardsPage = () => {
 export const openRewardQrModal = (userRewardId) => {
     const ur = state.userRewards.find(r => r.userRewardId === userRewardId);
     if (!ur) return;
-    
-    logUserActivity('view_qr', `Opened QR for order`, { userRewardId });
-
     const qrValue = `ecocampus-order:${userRewardId}-user:${state.currentUser.id}`;
-    els.qrModal.innerHTML = `
-        <div class="flex justify-between items-center mb-4"><h3 class="text-xl font-bold text-gray-800 dark:text-gray-100">Reward QR</h3><button onclick="closeQrModal()" class="text-gray-400"><i data-lucide="x" class="w-6 h-6"></i></button></div><p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Show this QR at <strong>${ur.storeName}</strong> to redeem <strong>${ur.productName}</strong>.</p><div class="flex justify-center mb-4"><img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrValue)}" class="rounded-lg border"></div><button onclick="closeQrModal()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg">Close</button>`;
+    els.qrModal.innerHTML = `<div class="flex justify-between items-center mb-4"><h3 class="text-xl font-bold text-gray-800 dark:text-gray-100">Reward QR</h3><button onclick="closeQrModal()" class="text-gray-400"><i data-lucide="x" class="w-6 h-6"></i></button></div><p class="text-sm text-gray-600 dark:text-gray-300 mb-4">Show this QR at <strong>${ur.storeName}</strong> to redeem <strong>${ur.productName}</strong>.</p><div class="flex justify-center mb-4"><img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(qrValue)}" class="rounded-lg border"></div><button onclick="closeQrModal()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-lg">Close</button>`;
     els.qrModalOverlay.classList.remove('hidden');
     setTimeout(() => els.qrModal.classList.remove('translate-y-full'), 10);
     if(window.lucide) window.lucide.createIcons();
@@ -469,22 +467,26 @@ export const renderEcoPointsPage = () => {
             </div>`;
         }).join('');
     }
-    const pageContainer = document.getElementById('ecopoints');
+    
+    // FIX: Correct insertion logic for the "How to Earn" card
     let earnCard = document.getElementById('how-to-earn-card');
-    if (!earnCard && pageContainer) {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = `
-            <div id="how-to-earn-card" class="glass-card p-6 rounded-2xl mb-6">
-                <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">How to Earn Points</h3>
-                <div class="space-y-4">
-                    <div class="flex items-start gap-3"><i data-lucide="recycle" class="w-5 h-5 text-green-500 mt-0.5"></i><p class="text-sm text-gray-600 dark:text-gray-300">Submit plastic at collection points.</p></div>
-                    <div class="flex items-start gap-3"><i data-lucide="calendar-heart" class="w-5 h-5 text-purple-500 mt-0.5"></i><p class="text-sm text-gray-600 dark:text-gray-300">Attend Green Club events and workshops.</p></div>
-                    <div class="flex items-start gap-3"><i data-lucide="medal" class="w-5 h-5 text-yellow-500 mt-0.5"></i><p class="text-sm text-gray-600 dark:text-gray-300">Complete special "Eco-Challenges".</p></div>
-                </div>
-            </div>`;
-        const recentActivityCard = document.getElementById('ecopoints-recent-activity')?.parentElement;
-        if (recentActivityCard) { pageContainer.insertBefore(tempDiv.firstElementChild, recentActivityCard); }
+    if (!earnCard) {
+        const recentActivityCard = document.getElementById('ecopoints-recent-activity')?.closest('.glass-card');
+        if (recentActivityCard && recentActivityCard.parentNode) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = `
+                <div id="how-to-earn-card" class="glass-card p-6 rounded-2xl mb-6">
+                    <h3 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">How to Earn Points</h3>
+                    <div class="space-y-4">
+                        <div class="flex items-start gap-3"><i data-lucide="recycle" class="w-5 h-5 text-green-500 mt-0.5"></i><p class="text-sm text-gray-600 dark:text-gray-300">Submit plastic at collection points.</p></div>
+                        <div class="flex items-start gap-3"><i data-lucide="calendar-heart" class="w-5 h-5 text-purple-500 mt-0.5"></i><p class="text-sm text-gray-600 dark:text-gray-300">Attend Green Club events and workshops.</p></div>
+                        <div class="flex items-start gap-3"><i data-lucide="medal" class="w-5 h-5 text-yellow-500 mt-0.5"></i><p class="text-sm text-gray-600 dark:text-gray-300">Complete special "Eco-Challenges".</p></div>
+                    </div>
+                </div>`;
+            recentActivityCard.parentNode.insertBefore(tempDiv.firstElementChild, recentActivityCard);
+        }
     }
+
     const historyContainer = document.getElementById('ecopoints-recent-activity');
     if (historyContainer) {
         const recentHistory = state.history.slice(0, 5); 
@@ -503,7 +505,6 @@ export const renderEcoPointsPage = () => {
     if(window.lucide) window.lucide.createIcons();
 };
 
-// Attach to window
 window.renderRewardsWrapper = renderRewards;
 window.showProductDetailPage = showProductDetailPage;
 window.openPurchaseModal = openPurchaseModal;
