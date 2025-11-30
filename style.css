@@ -571,3 +571,85 @@ body.low-data-mode .animate-float {
 .typing-dot:nth-child(1) { animation-delay: -0.32s; }
 .typing-dot:nth-child(2) { animation-delay: -0.16s; }
 @keyframes typingBounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+/* Masonry Grid for Gallery */
+.masonry-grid {
+    column-count: 2;
+    column-gap: 1rem;
+}
+@media (min-width: 768px) {
+    .masonry-grid {
+        column-count: 3;
+    }
+}
+@media (min-width: 1024px) {
+    .masonry-grid {
+        column-count: 4;
+    }
+}
+
+/* Lightbox Transition */
+#gallery-modal {
+    transition: opacity 0.3s ease-in-out;
+    backdrop-filter: blur(10px);
+}
+
+@keyframes breathe {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+}
+.animate-breathe {
+    animation: breathe 6s ease-in-out infinite;
+}
+
+/* Custom Utilities for Gallery Shapes */
+.rounded-t-full {
+    border-top-left-radius: 9999px;
+    border-top-right-radius: 9999px;
+}
+.font-jakarta {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+}
+/* Add this to your CSS */
+.main-content {
+    transition: background-color 0.7s cubic-bezier(0.4, 0, 0.2, 1); /* Smooth 700ms transition */
+    will-change: background-color;
+}
+
+/* Ensure the header is transparent or blends in GreenLens */
+#green-lens .main-content {
+    /* The JS handles the BG color */
+}
+/* Smooth Background Transitions */
+.main-content, #sidebar, header {
+    transition: background-color 0.7s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s ease;
+    will-change: background-color;
+}
+
+/* Force White Text on Sidebar when background is dark (GreenLens) */
+#sidebar.force-dark-text .sidebar-nav-item,
+#sidebar.force-dark-text h2, 
+#sidebar.force-dark-text p,
+#sidebar.force-dark-text i {
+    color: rgba(255, 255, 255, 0.9) !important;
+}
+
+#sidebar.force-dark-text .sidebar-nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+#sidebar.force-dark-text .border-b,
+#sidebar.force-dark-text .border-t {
+    border-color: rgba(255, 255, 255, 0.1) !important;
+}
+/* Smooth Background Transitions - Only for main content */
+.main-content {
+    transition: background-color 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+    will-change: background-color;
+}
+
+/* Ensure sidebar/nav stay on top and have their own background */
+#sidebar, .glass-bottom-bar, header {
+    z-index: 50; 
+    /* Removed the transition: background-color property here */
+}
