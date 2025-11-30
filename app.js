@@ -6,91 +6,146 @@ import { loadStoreAndProductData, loadUserRewardsData, renderRewards } from './s
 import { loadLeaderboardData } from './social.js';
 import { loadChallengesData } from './challenges.js';
 import { loadEventsData } from './events.js'; 
+import { loadGalleryData } from './gallery.js'; 
+import { loadPlasticLogData } from './plastic-log.js'; // <--- NEW IMPORT
 
 // Auth
 const checkAuth = async () => {
     try {
         const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) { console.error('Session Error:', error.message); redirectToLogin(); return; }
-        if (!session) { console.log('No active session.'); redirectToLogin(); return; }
+        if (error) { 
+            console.error('Auth Check: Session Error:', error.message); 
+            redirectToLogin(); 
+            return; 
+        }
+        if (!session) { 
+            console.warn('Auth Check: No active session found. Redirecting to login.'); 
+            redirectToLogin(); 
+            return; 
+        }
         state.userAuth = session.user;
         await initializeApp();
-    } catch (err) { console.error('Auth check failed:', err); }
+    } catch (err) { 
+        console.error('CRITICAL: Auth check failed unexpectedly:', err); 
+    }
 };
 
 const initializeApp = async () => {
     try {
+        console.log('Init: Fetching user profile...');
         const { data: userProfile, error } = await supabase.from('users').select('*').eq('auth_user_id', state.userAuth.id).single();
-        if (error || !userProfile) { alert('Could not load profile. Logging out.'); await handleLogout(); return; }
+        
+        if (error) {
+            console.error('Init: Failed to fetch user profile:', error.message);
+            alert('Could not load profile. Logging out.'); 
+            await handleLogout(); 
+            return; 
+        }
+        if (!userProfile) {
+            console.error('Init: User profile is null despite valid session.');
+            alert('Profile not found. Logging out.');
+            await handleLogout();
+            return;
+        }
         
         state.currentUser = userProfile;
-        
-        // Log Login Activity
         logUserActivity('login', 'User logged in');
 
-        // Initialize History State for Mobile Back Button
+        // Initialize History State
         history.replaceState({ pageId: 'dashboard' }, '', '#dashboard');
 
-        await loadDashboardData();
-        renderDashboard(); 
+        // Initial Dashboard Load (Robust)
+        try {
+            await loadDashboardData();
+            renderDashboard(); 
+        } catch (dashErr) {
+            console.error("Init: Dashboard data load failed (non-fatal):", dashErr);
+        }
         
         setTimeout(() => document.getElementById('app-loading').classList.add('loaded'), 500);
         if(window.lucide) window.lucide.createIcons();
         
-        // Parallel Data Load
-        await Promise.all([
+        // Parallel Data Load with individual error tracking
+        console.log('Init: Starting parallel data fetch...');
+        const results = await Promise.allSettled([
             loadStoreAndProductData(),
             loadLeaderboardData(),
             loadHistoryData(),
             loadChallengesData(),
             loadEventsData(),
-            loadUserRewardsData()
+            loadUserRewardsData(),
+            loadGalleryData(),
+            loadPlasticLogData() // <--- NEW: Load Plastic Log Data
         ]);
+
+        // Log failures for specific modules
+        const moduleNames = ['Store', 'Leaderboard', 'History', 'Challenges', 'Events', 'Rewards', 'Gallery', 'PlasticLog'];
+        results.forEach((result, index) => {
+            if (result.status === 'rejected') {
+                console.error(`Init: Module '${moduleNames[index]}' failed to load:`, result.reason);
+            }
+        });
         
         setupFileUploads();
-        setupRealtimeSubscriptions(); // Start Realtime Listeners
+        setupRealtimeSubscriptions(); 
 
-    } catch (err) { console.error('Initialization Error:', err); }
+    } catch (err) { 
+        console.error('CRITICAL: App initialization crashed:', err); 
+    }
 };
 
 // --- REALTIME SUBSCRIPTIONS ---
 const setupRealtimeSubscriptions = () => {
-    // 1. Listen for Points/Profile Changes
-    const userSub = supabase
-        .channel('public:users')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${state.currentUser.id}` }, (payload) => {
-            console.log('Realtime User Update:', payload);
-            state.currentUser = { ...state.currentUser, ...payload.new };
-            renderDashboard(); // Update points/name in UI immediately
-        })
-        .subscribe();
-    state.activeSubscriptions.push(userSub);
+    try {
+        // 1. User Profile Updates
+        const userSub = supabase
+            .channel('public:users')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users', filter: `id=eq.${state.currentUser.id}` }, (payload) => {
+                console.log('Realtime: User profile updated:', payload);
+                state.currentUser = { ...state.currentUser, ...payload.new };
+                renderDashboard(); 
+            })
+            .subscribe((status, err) => {
+                if (status === 'SUBSCRIBED') console.log('Realtime: Subscribed to user updates');
+                if (status === 'CHANNEL_ERROR') console.error('Realtime: User subscription error:', err);
+            });
+        state.activeSubscriptions.push(userSub);
 
-    // 2. Listen for Order Updates (e.g. Approved/Rejected)
-    const ordersSub = supabase
-        .channel('public:orders')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `user_id=eq.${state.currentUser.id}` }, () => {
-             console.log('Realtime Order Update');
-             loadUserRewardsData(); // Refresh orders list
-             refreshUserData(); // Refresh points (in case refund)
-        })
-        .subscribe();
-    state.activeSubscriptions.push(ordersSub);
+        // 2. Order Updates
+        const ordersSub = supabase
+            .channel('public:orders')
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders', filter: `user_id=eq.${state.currentUser.id}` }, () => {
+                 console.log('Realtime: Order status updated');
+                 loadUserRewardsData(); 
+                 refreshUserData(); 
+            })
+            .subscribe((status, err) => {
+                if (status === 'SUBSCRIBED') console.log('Realtime: Subscribed to order updates');
+                if (status === 'CHANNEL_ERROR') console.error('Realtime: Order subscription error:', err);
+            });
+        state.activeSubscriptions.push(ordersSub);
+    } catch (err) {
+        console.error('Realtime: Failed to setup subscriptions:', err);
+    }
 };
 
 const handleLogout = async () => {
     try {
-        // Log Logout
+        console.log('Logout: Initiating logout sequence...');
         logUserActivity('logout', 'User logged out');
         
-        // Cleanup Subscriptions
-        state.activeSubscriptions.forEach(sub => supabase.removeChannel(sub));
+        state.activeSubscriptions.forEach(sub => {
+            try { supabase.removeChannel(sub); } catch(e) { console.warn('Logout: Failed to remove channel', e); }
+        });
         state.activeSubscriptions = [];
 
         const { error } = await supabase.auth.signOut();
-        if (error) console.error('Logout error:', error.message);
+        if (error) console.error('Logout: Supabase signOut error:', error.message);
+        
         redirectToLogin();
-    } catch (err) { console.error('Logout Error:', err); }
+    } catch (err) { 
+        console.error('Logout: Critical error during logout:', err); 
+    }
 };
 
 const redirectToLogin = () => { window.location.replace('login.html'); };
@@ -98,9 +153,15 @@ const redirectToLogin = () => { window.location.replace('login.html'); };
 export const refreshUserData = async () => {
     try {
         const { data: userProfile, error } = await supabase.from('users').select('*').eq('id', state.currentUser.id).single();
-        if (error || !userProfile) return;
+        if (error) {
+            console.error('RefreshData: Failed to fetch user:', error.message);
+            return;
+        }
+        if (!userProfile) {
+            console.warn('RefreshData: User profile missing.');
+            return;
+        }
         
-        // Preserving local state
         const existingState = {
             isCheckedInToday: state.currentUser.isCheckedInToday,
             checkInStreak: state.currentUser.checkInStreak,
@@ -120,12 +181,13 @@ export const refreshUserData = async () => {
         
         setTimeout(() => header?.classList.remove('points-pulse'), 400);
         renderDashboard();
-    } catch (err) { console.error('Refresh User Data Error:', err); }
+    } catch (err) { 
+        console.error('RefreshData: Unexpected error:', err); 
+    }
 };
 
 // Event Listeners
 if(els.storeSearch) {
-    // Optimization: Debounce search input
     els.storeSearch.addEventListener('input', debounce(() => {
         renderRewards();
     }, 300));
@@ -133,8 +195,8 @@ if(els.storeSearch) {
 if(els.storeSearchClear) els.storeSearchClear.addEventListener('click', () => { els.storeSearch.value = ''; renderRewards(); });
 if(els.sortBy) els.sortBy.addEventListener('change', renderRewards);
 
-document.getElementById('sidebar-toggle-btn').addEventListener('click', () => toggleSidebar());
-document.getElementById('logout-button').addEventListener('click', handleLogout);
+document.getElementById('sidebar-toggle-btn')?.addEventListener('click', () => toggleSidebar());
+document.getElementById('logout-button')?.addEventListener('click', handleLogout);
 
 // Theme Logic
 const themeBtn = document.getElementById('theme-toggle-btn');
@@ -142,27 +204,28 @@ const themeText = document.getElementById('theme-text');
 const themeIcon = document.getElementById('theme-icon');
 
 const applyTheme = (isDark) => {
-    document.documentElement.classList.toggle('dark', isDark);
-    if(themeText) themeText.textContent = isDark ? 'Dark Mode' : 'Light Mode';
-    if(themeIcon) themeIcon.setAttribute('data-lucide', isDark ? 'moon' : 'sun');
-    if(window.lucide) window.lucide.createIcons();
+    try {
+        document.documentElement.classList.toggle('dark', isDark);
+        if(themeText) themeText.textContent = isDark ? 'Dark Mode' : 'Light Mode';
+        if(themeIcon) themeIcon.setAttribute('data-lucide', isDark ? 'moon' : 'sun');
+        if(window.lucide) window.lucide.createIcons();
+    } catch (e) { console.error('Theme: Apply failed', e); }
 };
 
-themeBtn.addEventListener('click', () => {
-    const isDark = document.documentElement.classList.toggle('dark');
-    localStorage.setItem('eco-theme', isDark ? 'dark' : 'light');
-    applyTheme(isDark);
-    
-    // Log Theme Change
-    logUserActivity('theme_change', `Switched to ${isDark ? 'dark' : 'light'} mode`);
-});
+if (themeBtn) {
+    themeBtn.addEventListener('click', () => {
+        const isDark = document.documentElement.classList.toggle('dark');
+        localStorage.setItem('eco-theme', isDark ? 'dark' : 'light');
+        applyTheme(isDark);
+        logUserActivity('theme_change', `Switched to ${isDark ? 'dark' : 'light'} mode`);
+    });
+}
 
 const savedTheme = localStorage.getItem('eco-theme');
 applyTheme(savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches));
 
 // --- FORM LOGIC ---
 
-// 1. Change Password Form
 const changePwdForm = document.getElementById('change-password-form');
 if (changePwdForm) {
     changePwdForm.addEventListener('submit', async (e) => {
@@ -184,10 +247,7 @@ if (changePwdForm) {
         msgEl.textContent = '';
 
         try {
-            const { data, error } = await supabase.auth.updateUser({
-                password: newPassword
-            });
-
+            const { data, error } = await supabase.auth.updateUser({ password: newPassword });
             if (error) throw error;
 
             msgEl.textContent = 'Password updated successfully!';
@@ -196,7 +256,7 @@ if (changePwdForm) {
             logUserActivity('password_change', 'User changed password');
 
         } catch (err) {
-            console.error('Password Update Error:', err);
+            console.error('Password Change: API Error:', err);
             msgEl.textContent = err.message || 'Failed to update password.';
             msgEl.className = 'text-sm text-center text-red-500 font-bold';
         } finally {
@@ -207,7 +267,6 @@ if (changePwdForm) {
     });
 }
 
-// 2. Redeem Code Form
 const redeemForm = document.getElementById('redeem-code-form');
 if (redeemForm) {
     redeemForm.addEventListener('submit', async (e) => {
@@ -236,7 +295,7 @@ if (redeemForm) {
             await refreshUserData(); 
             
         } catch (err) { 
-            console.error("Redemption Error:", err);
+            console.error("Redeem Code: RPC Error:", err);
             msgEl.textContent = err.message || "Invalid or expired code."; 
             msgEl.classList.add('text-red-500', 'font-bold'); 
             logUserActivity('redeem_code_fail', `Failed to redeem code: ${code}`);
