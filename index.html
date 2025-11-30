@@ -33,6 +33,13 @@
                     animation: {
                         'float': 'float 18s infinite ease-in-out',
                         'slideUp': 'slideUp 0.35s ease forwards',
+                        'breathe': 'breathe 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        breathe: {
+                            '0%, 100%': { transform: 'scale(1)' },
+                            '50%': { transform: 'scale(1.02)' },
+                        }
                     }
                 },
             },
@@ -78,10 +85,11 @@
                 <button onclick="showPage('history')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="history" class="w-5 h-5 mr-3"></i>History</button>
                 <button onclick="showPage('leaderboard')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="users" class="w-5 h-5 mr-3"></i>Leaderboard</button>
                 <button onclick="showPage('events')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="calendar" class="w-5 h-5 mr-3"></i>All Events</button>
+                <button onclick="showPage('green-lens')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="aperture" class="w-5 h-5 mr-3"></i>GreenLens</button>
+                <button onclick="showPage('plastic-log')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="recycle" class="w-5 h-5 mr-3"></i>Plastic Log</button>
                 <button onclick="showPage('challenges')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hidden lg:flex"><i data-lucide="camera" class="w-5 h-5 mr-3"></i>Challenges</button>
                 <button onclick="showPage('rewards')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 hidden lg:flex"><i data-lucide="store" class="w-5 h-5 mr-3"></i>Store</button>
                 <button onclick="showPage('redeem-code')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="ticket" class="w-5 h-5 mr-3"></i>Redeem Code</button>
-                
                 <div class="pt-2 border-t border-gray-200 dark:border-gray-700"></div>
                 <button onclick="showPage('about')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="info" class="w-5 h-5 mr-3"></i>About Us</button>
                 <button onclick="showPage('help')" class="sidebar-nav-item w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"><i data-lucide="help-circle" class="w-5 h-5 mr-3"></i>Help & Support</button>
@@ -130,7 +138,9 @@
                         </div>
                         
                         <div>
-                             <h3 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Your Impact</h3>
+                            <div id="dashboard-aqi-card" class="mb-6 hidden transition-all duration-500"></div>
+
+                            <h3 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">Your Impact</h3>
                             <div class="grid grid-cols-3 gap-4 mb-8">
                                 <div class="glass-card p-4 rounded-xl text-center"><i data-lucide="leaf" class="w-8 h-8 text-green-500 mx-auto mb-2"></i><p id="impact-co2" class="font-bold text-lg dark:text-gray-100">0 kg</p><p class="text-xs text-gray-500 dark:text-gray-400">CO₂ Saved</p></div>
                                 <div class="glass-card p-4 rounded-xl text-center"><i data-lucide="recycle" class="w-8 h-8 text-blue-500 mx-auto mb-2"></i><p id="impact-recycled" class="font-bold text-lg dark:text-gray-100">0 kg</p><p class="text-xs text-gray-500 dark:text-gray-400">Recycled</p></div>
@@ -164,6 +174,22 @@
                             </div>
                         </div>
                         <div class="glass-card p-6 rounded-2xl"><h4 class="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">Personal Info</h4><div class="space-y-3 text-sm"><div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Student ID</span><span id="profile-student-id" class="font-semibold text-gray-900 dark:text-gray-100">...</span></div><div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Course</span><span id="profile-course" class="font-semibold text-gray-900 dark:text-gray-100">...</span></div><div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Mobile</span><span id="profile-mobile" class="font-semibold text-gray-900 dark:text-gray-100">...</span></div><div class="flex justify-between"><span class="text-gray-600 dark:text-gray-400">Email</span><span id="profile-email-personal" class="font-semibold text-gray-900 dark:text-gray-100">...</span></div></div></div>
+                    </div>
+                </div>
+
+                <div id="green-lens" class="page p-0 w-full min-h-full">
+                    <div id="gallery-feed" class="w-full">
+                        <div class="h-screen flex flex-col items-center justify-center text-gray-400">
+                            <div class="animate-spin w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full mb-4"></div>
+                            <p>Curating stories...</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="plastic-log" class="page p-6">
+                    <h2 class="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-6">Plastic Log</h2>
+                    <div id="plastic-log-content">
+                        <p class="text-center text-gray-500">Loading records...</p>
                     </div>
                 </div>
 
@@ -234,7 +260,7 @@
                         <div><label for="store-search-input" class="block text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 px-1">Search store or reward</label><div class="relative"><input id="store-search-input" type="text" placeholder="Try “Hoodie” or “Canteen coupon”" class="w-full border border-gray-300 dark:border-gray-700 px-4 py-3 rounded-full bg-white/80 dark:bg-gray-900/80 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"><button id="store-search-clear" class="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 hover:text-gray-600 hidden"><i data-lucide="x" class="w-5 h-5"></i></button></div></div>
                         <div><label for="sort-by-select" class="block text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 px-1">Sort by</label><select id="sort-by-select" class="custom-select w-full border border-gray-300 dark:border-gray-700 px-4 py-3 rounded-full focus:outline-none focus:ring-2 focus:ring-green-500 bg-white/80 dark:bg-gray-900/90 dark:text-white"><option value="popularity">Popularity</option><option value="points-lh">Points: Low to High</option><option value="points-hl">Points: High to Low</option><option value="price-lh">Price: Low to High</option><option value="price-hl">Price: High to Low</option></select></div>
                     </div>
-                    <div id="product-grid" class="grid grid-cols-2 gap-4"><p class="text-center text-gray-500 dark:text-gray-400 col-span-2">Loading rewards...</p></div>
+                    <div id="product-grid" class="flex flex-col gap-8 pb-10"><p class="text-center text-gray-500 dark:text-gray-400 col-span-2">Loading rewards...</p></div>
                 </div>
 
                 <div id="redeem-code" class="page p-6">
@@ -320,10 +346,8 @@
     <button onclick="openChatbotModal()" id="chatbot-btn" class="fixed z-30 bottom-24 lg:bottom-10 right-6 w-16 h-16 flex items-center justify-center hover:scale-105 transition-transform"><img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" alt="EcoBot" class="w-full h-full object-contain drop-shadow-xl"></button>
 
     <div id="checkin-modal" class="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm flex items-end justify-center opacity-0 invisible" onclick="closeCheckinModal()"><div id="checkin-modal-content" class="bg-white dark:bg-gray-800 rounded-t-2xl w-full max-w-md p-6 transform translate-y-full" onclick="event.stopPropagation()"><div class="flex justify-between items-center mb-4"><h3 class="text-2xl font-bold text-gray-800 dark:text-gray-100">Daily Check-in</h3><button onclick="closeCheckinModal()" class="text-gray-400"><i data-lucide="x" class="w-6 h-6"></i></button></div><p id="checkin-modal-streak" class="text-center text-5xl font-extrabold text-yellow-600 mb-6">0 Days</p><div id="checkin-modal-calendar" class="flex justify-center space-x-2 mb-6"></div><div id="checkin-modal-button-container"></div></div></div>
-    
     <div id="purchase-modal-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="closePurchaseModal()"></div>
     <div id="purchase-modal" class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white dark:bg-gray-800 rounded-t-2xl z-50 p-6 transform translate-y-full transition-transform duration-300 ease-in-out"></div>
-    
     <div id="qr-modal-overlay" class="fixed inset-0 bg-black/50 z-40 hidden" onclick="closeQrModal()"></div>
     <div id="qr-modal" class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-white dark:bg-gray-800 rounded-t-2xl z-50 p-6 transform translate-y-full transition-transform duration-300 ease-in-out"></div>
     
@@ -331,87 +355,42 @@
         <div class="relative flex-1 bg-black flex items-center justify-center overflow-hidden">
             <video id="camera-feed" autoplay playsinline class="w-full h-full object-cover"></video>
             <canvas id="camera-canvas" class="hidden"></canvas>
-            
-            <button onclick="closeCameraModal()" class="absolute top-6 right-6 p-3 bg-black/40 text-white rounded-full z-10 backdrop-blur-md">
-                <i data-lucide="x" class="w-6 h-6"></i>
-            </button>
-            <button onclick="switchCamera()" class="absolute top-6 left-6 p-3 bg-black/40 text-white rounded-full z-10 backdrop-blur-md">
-                <i data-lucide="refresh-ccw" class="w-6 h-6"></i>
-            </button>
+            <button onclick="closeCameraModal()" class="absolute top-6 right-6 p-3 bg-black/40 text-white rounded-full z-10 backdrop-blur-md"><i data-lucide="x" class="w-6 h-6"></i></button>
+            <button onclick="switchCamera()" class="absolute top-6 left-6 p-3 bg-black/40 text-white rounded-full z-10 backdrop-blur-md"><i data-lucide="refresh-ccw" class="w-6 h-6"></i></button>
         </div>
-
-        <div class="h-32 bg-black flex items-center justify-center space-x-12 pb-8">
-            <button onclick="capturePhoto()" class="w-20 h-20 rounded-full bg-white border-4 border-gray-300 flex items-center justify-center shadow-lg active:scale-95 transition-transform">
-                <div class="w-16 h-16 rounded-full bg-white border-2 border-black"></div>
-            </button>
-        </div>
+        <div class="h-32 bg-black flex items-center justify-center space-x-12 pb-8"><button onclick="capturePhoto()" class="w-20 h-20 rounded-full bg-white border-4 border-gray-300 flex items-center justify-center shadow-lg active:scale-95 transition-transform"><div class="w-16 h-16 rounded-full bg-white border-2 border-black"></div></button></div>
     </div>
 
     <div id="eco-quiz-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center opacity-0 invisible p-4 transition-all">
         <div id="eco-quiz-modal-content" class="bg-white dark:bg-gray-800 rounded-2xl w-full max-w-sm p-6 transform scale-95 transition-transform">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                    <i data-lucide="brain" class="w-5 h-5 text-indigo-500"></i> Eco Quiz
-                </h3>
-                <button onclick="closeEcoQuizModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button>
-            </div>
-
-            <div id="eco-quiz-loading" class="text-center py-8">
-                <i data-lucide="loader-2" class="w-8 h-8 animate-spin text-indigo-500 mx-auto mb-2"></i>
-                <p class="text-sm text-gray-500">Loading Question...</p>
-            </div>
-
-            <div id="eco-quiz-body" class="hidden">
-                <p id="eco-quiz-question" class="text-lg font-bold text-gray-900 dark:text-gray-100 mb-6 text-center leading-snug">...</p>
-                <div id="eco-quiz-options" class="space-y-3">
-                    </div>
-                <div id="eco-quiz-feedback" class="hidden mt-4 text-center font-bold"></div>
-            </div>
-
-            <div id="eco-quiz-already-played" class="hidden text-center py-6">
-                 <div class="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <i data-lucide="check-circle-2" class="w-8 h-8 text-green-600 dark:text-green-400"></i>
-                 </div>
-                 <h4 class="text-lg font-bold text-gray-900 dark:text-gray-100">All Done!</h4>
-                 <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">You've already played today's quiz.</p>
-                 <button onclick="closeEcoQuizModal()" class="mt-6 w-full py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl">Close</button>
-            </div>
+            <div class="flex justify-between items-center mb-4"><h3 class="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2"><i data-lucide="brain" class="w-5 h-5 text-indigo-500"></i> Eco Quiz</h3><button onclick="closeEcoQuizModal()" class="text-gray-400 hover:text-gray-600"><i data-lucide="x" class="w-5 h-5"></i></button></div>
+            <div id="eco-quiz-loading" class="text-center py-8"><i data-lucide="loader-2" class="w-8 h-8 animate-spin text-indigo-500 mx-auto mb-2"></i><p class="text-sm text-gray-500">Loading Question...</p></div>
+            <div id="eco-quiz-body" class="hidden"><p id="eco-quiz-question" class="text-lg font-bold text-gray-900 dark:text-gray-100 mb-6 text-center leading-snug">...</p><div id="eco-quiz-options" class="space-y-3"></div><div id="eco-quiz-feedback" class="hidden mt-4 text-center font-bold"></div></div>
+            <div id="eco-quiz-already-played" class="hidden text-center py-6"><div class="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-4"><i data-lucide="check-circle-2" class="w-8 h-8 text-green-600 dark:text-green-400"></i></div><h4 class="text-lg font-bold text-gray-900 dark:text-gray-100">All Done!</h4><p class="text-sm text-gray-500 dark:text-gray-400 mt-1">You've already played today's quiz.</p><button onclick="closeEcoQuizModal()" class="mt-6 w-full py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-bold rounded-xl">Close</button></div>
         </div>
     </div>
     
-    <div id="chatbot-modal" class="fixed inset-0 z-[60] bg-[#e6f7ed] dark:bg-[#07180f] transition-transform duration-500 translate-y-full invisible flex flex-col h-[100dvh] w-full font-jakarta lg:absolute lg:h-[600px] lg:w-[400px] lg:bottom-24 lg:right-10 lg:rounded-3xl lg:shadow-2xl lg:border lg:border-gray-200 dark:lg:border-gray-700">
-        <div class="absolute inset-0 overflow-hidden pointer-events-none z-0">
-            <div class="absolute top-[-60px] left-[-50px] w-[350px] h-[350px] rounded-full bg-[#c4f7d2] dark:bg-[#0e3e2a] blur-[90px] opacity-60 animate-float"></div>
-            <div class="absolute bottom-[-80px] right-[-60px] w-[450px] h-[450px] rounded-full bg-[#dafee9] dark:bg-[#0f5137] blur-[90px] opacity-60 animate-float delay-[-5s]"></div>
+    <div id="gallery-modal" class="fixed inset-0 z-[100] bg-black/90 hidden items-center justify-center p-4 opacity-0" onclick="closeLightbox()">
+        <div class="relative w-full max-w-4xl max-h-[90vh] flex flex-col items-center" onclick="event.stopPropagation()">
+            <button onclick="closeLightbox()" class="absolute -top-10 right-0 text-white/80 hover:text-white p-2"><i data-lucide="x" class="w-8 h-8"></i></button>
+            <div id="gallery-modal-content" class="w-full text-center"></div>
         </div>
+    </div>
 
+    <div id="chatbot-modal" class="fixed inset-0 z-[60] bg-[#e6f7ed] dark:bg-[#07180f] transition-transform duration-500 translate-y-full invisible flex flex-col h-[100dvh] w-full font-jakarta lg:absolute lg:h-[600px] lg:w-[400px] lg:bottom-24 lg:right-10 lg:rounded-3xl lg:shadow-2xl lg:border lg:border-gray-200 dark:lg:border-gray-700">
+        <div class="absolute inset-0 overflow-hidden pointer-events-none z-0"><div class="absolute top-[-60px] left-[-50px] w-[350px] h-[350px] rounded-full bg-[#c4f7d2] dark:bg-[#0e3e2a] blur-[90px] opacity-60 animate-float"></div><div class="absolute bottom-[-80px] right-[-60px] w-[450px] h-[450px] rounded-full bg-[#dafee9] dark:bg-[#0f5137] blur-[90px] opacity-60 animate-float delay-[-5s]"></div></div>
         <header class="relative z-10 h-[72px] flex-shrink-0 flex items-center justify-between px-6 bg-white/60 dark:bg-[#143723]/50 backdrop-blur-xl border-b border-[#c8ffe1]/75 dark:border-black/40 shadow-sm">
             <div class="flex items-center gap-3">
-                <div class="relative">
-                    <div class="w-12 h-12 rounded-full flex items-center justify-center bg-white shadow-[0_6px_18px_rgba(0,128,60,0.35)] overflow-hidden border-2 border-white">
-                        <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" class="w-full h-full object-contain">
-                    </div>
-                    <div class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-[#34c46e] dark:bg-[#3af89b] border-2 border-[#e6f7ed] dark:border-[#07180f]"></div>
-                </div>
-                <div>
-                    <h2 class="text-lg font-bold text-[#163626] dark:text-[#dff7e8]">EcoBuddy</h2>
-                    <p class="text-xs text-[#6f8c79] dark:text-[#97c7a9]">Always Online</p>
-                </div>
+                <div class="relative"><div class="w-12 h-12 rounded-full flex items-center justify-center bg-white shadow-[0_6px_18px_rgba(0,128,60,0.35)] overflow-hidden border-2 border-white"><img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" class="w-full h-full object-contain"></div><div class="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-[#34c46e] dark:bg-[#3af89b] border-2 border-[#e6f7ed] dark:border-[#07180f]"></div></div>
+                <div><h2 class="text-lg font-bold text-[#163626] dark:text-[#dff7e8]">EcoBuddy</h2><p class="text-xs text-[#6f8c79] dark:text-[#97c7a9]">Always Online</p></div>
             </div>
-            
-            <button onclick="closeChatbotModal()" class="w-10 h-10 rounded-full flex items-center justify-center bg-white/10 hover:bg-red-100 text-[#163626] dark:text-[#dff7e8] hover:text-red-500 transition-colors">
-                <i data-lucide="x" class="w-5 h-5"></i>
-            </button>
+            <button onclick="closeChatbotModal()" class="w-10 h-10 rounded-full flex items-center justify-center bg-white/10 hover:bg-red-100 text-[#163626] dark:text-[#dff7e8] hover:text-red-500 transition-colors"><i data-lucide="x" class="w-5 h-5"></i></button>
         </header>
-
         <div id="chatbot-messages" class="relative z-10 flex-1 overflow-y-auto p-6 space-y-6 scroll-smooth"></div>
-
         <div class="flex-shrink-0 p-5 bg-gradient-to-t from-[#e6f7ed] dark:from-[#07180f] to-transparent z-20 w-full">
             <form id="chatbot-form" class="flex items-center p-2 pl-5 bg-white/60 dark:bg-[#143723]/50 backdrop-blur-xl border border-[#c8ffe1]/75 dark:border-black/40 rounded-full shadow-lg w-full">
                 <input id="chatbot-input" type="text" placeholder="Ask something eco-friendly..." class="flex-1 bg-transparent border-none outline-none text-[#163626] dark:text-[#dff7e8] placeholder-[#6f8c79] dark:placeholder-[#97c7a9] text-base min-w-0" autocomplete="off">
-                <button type="submit" class="flex-shrink-0 w-[46px] h-[46px] rounded-full flex items-center justify-center text-white text-lg shadow-md bg-gradient-to-br from-[#34c46e] to-[#169653] hover:scale-105 active:scale-95 transition-transform">
-                    <i data-lucide="arrow-up" class="w-5 h-5"></i>
-                </button>
+                <button type="submit" class="flex-shrink-0 w-[46px] h-[46px] rounded-full flex items-center justify-center text-white text-lg shadow-md bg-gradient-to-br from-[#34c46e] to-[#169653] hover:scale-105 active:scale-95 transition-transform"><i data-lucide="arrow-up" class="w-5 h-5"></i></button>
             </form>
         </div>
     </div>
