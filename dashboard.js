@@ -1,7 +1,9 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, formatDate, getIconForHistory, getPlaceholderImage, getTickImg, getUserInitials, getUserLevel, uploadToCloudinary, getTodayIST, logUserActivity } from './utils.js';
+// ADDED getIconForHistory TO THIS IMPORT LIST:
+import { els, formatDate, getPlaceholderImage, getTickImg, getUserInitials, getUserLevel, uploadToCloudinary, getTodayIST, logUserActivity, getIconForHistory } from './utils.js';
 import { refreshUserData } from './app.js';
+import { loadLeaderboardData } from './social.js'; 
 
 // --- DASHBOARD CORE ---
 
@@ -10,19 +12,20 @@ export const loadDashboardData = async () => {
         const userId = state.currentUser.id;
         const todayIST = getTodayIST(); 
 
-        // Use maybeSingle() to prevent 406 error on new users
+        // - We fetch 'last_checkin_date' to detect broken streaks
         const [
             { data: checkinData },
             { data: streakData },
             { data: impactData }
         ] = await Promise.all([
             supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', todayIST).limit(1),
-            supabase.from('user_streaks').select('current_streak').eq('user_id', userId).single(),
+            supabase.from('user_streaks').select('current_streak, last_checkin_date').eq('user_id', userId).single(),
             supabase.from('user_impact').select('*').eq('user_id', userId).maybeSingle()
         ]);
         
         state.currentUser.isCheckedInToday = (checkinData && checkinData.length > 0);
         state.currentUser.checkInStreak = streakData ? streakData.current_streak : 0;
+        state.currentUser.lastCheckInDate = streakData ? streakData.last_checkin_date : null; 
         state.currentUser.impact = impactData || { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
         
     } catch (err) {
@@ -34,7 +37,7 @@ export const renderDashboard = () => {
     if (!state.currentUser) return; 
     renderDashboardUI();
     renderCheckinButtonState();
-    initAQI(); // Initialize AQI card
+    initAQI(); 
 };
 
 const renderDashboardUI = () => {
@@ -78,7 +81,7 @@ const renderCheckinButtonState = () => {
     if(postEl) postEl.textContent = streak;
     
     const btn = els.dailyCheckinBtn;
-    if (!btn) return; // Guard clause in case button isn't in DOM
+    if (!btn) return; 
 
     if (state.currentUser.isCheckedInToday) {
         btn.classList.add('checkin-completed'); 
@@ -90,21 +93,19 @@ const renderCheckinButtonState = () => {
         btn.onclick = openCheckinModal;
     }
 };
-
 // --- AQI LOGIC ---
 
 const initAQI = () => {
     const card = document.getElementById('dashboard-aqi-card');
     if (!card) return;
 
-    // Only try to fetch if we haven't already (or if we want to refresh, logic can go here)
     if (card.innerHTML.trim() === "") {
         if (navigator.geolocation) {
             card.classList.remove('hidden');
             card.innerHTML = `
                 <div class="glass-card p-4 rounded-xl flex items-center justify-center">
                     <i data-lucide="loader-2" class="w-5 h-5 animate-spin text-gray-400 mr-2"></i>
-                    <span class="text-sm text-gray-500">Detecting Air Quality...</span>
+                    <span class="text-sm text-gray-500">Detecting Location...</span>
                 </div>`;
             
             navigator.geolocation.getCurrentPosition(
@@ -124,18 +125,25 @@ const initAQI = () => {
 const fetchAQI = async (lat, lon) => {
     const card = document.getElementById('dashboard-aqi-card');
     try {
-        const response = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
-        const data = await response.json();
-        const aqi = data.current.us_aqi;
+        // 1. Fetch AQI Data
+        const aqiRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
+        const aqiData = await aqiRes.json();
         
-        renderAQICard(card, aqi);
+        // 2. Fetch Location Name (Reverse Geocoding)
+        const locRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
+        const locData = await locRes.json();
+        
+        const city = locData.locality || locData.city || "Campus Area";
+        const aqi = aqiData.current.us_aqi;
+        
+        renderAQICard(card, aqi, city);
     } catch (err) {
         console.error("AQI Fetch Error:", err);
         card.classList.add('hidden');
     }
 };
 
-const renderAQICard = (card, aqi) => {
+const renderAQICard = (card, aqi, city) => {
     let status = 'Good';
     let colorClass = 'from-green-100 to-emerald-50 dark:from-green-900/40 dark:to-emerald-900/20 text-green-800 dark:text-green-300 border-green-200 dark:border-green-800';
     let icon = 'wind';
@@ -157,7 +165,10 @@ const renderAQICard = (card, aqi) => {
         <div class="bg-gradient-to-br ${colorClass} border p-5 rounded-2xl shadow-sm relative overflow-hidden animate-breathe">
             <div class="relative z-10 flex justify-between items-start">
                 <div>
-                    <p class="text-xs font-bold uppercase tracking-wider opacity-70 mb-1">Air Quality Index</p>
+                    <div class="flex items-center gap-1 mb-1 opacity-70">
+                        <i data-lucide="map-pin" class="w-3 h-3"></i>
+                        <p class="text-xs font-bold uppercase tracking-wider">${city}</p>
+                    </div>
                     <h3 class="text-3xl font-black flex items-center gap-2">
                         ${aqi} <span class="text-lg font-medium opacity-80">(${status})</span>
                     </h3>
@@ -173,12 +184,10 @@ const renderAQICard = (card, aqi) => {
     `;
     if(window.lucide) window.lucide.createIcons();
 };
-
-// --- HISTORY & PROFILE (These were missing!) ---
+// --- HISTORY & PROFILE ---
 
 export const loadHistoryData = async () => {
     try {
-        // Optimization: Limit to last 20 items
         const { data, error } = await supabase
             .from('points_ledger')
             .select('*')
@@ -295,33 +304,157 @@ export const setupFileUploads = () => {
     }
 };
 
+// --- STREAK RESTORE & CHECK-IN LOGIC ---
+
 export const openCheckinModal = () => {
     if (state.currentUser.isCheckedInToday) return;
     logUserActivity('ui_interaction', 'Opened check-in modal');
+    
+    // Calculate if streak is broken
+    let isStreakBroken = false;
+    if (state.currentUser.lastCheckInDate) {
+        const lastDate = new Date(state.currentUser.lastCheckInDate);
+        const today = new Date(); 
+        
+        lastDate.setHours(0,0,0,0);
+        today.setHours(0,0,0,0);
+        
+        const diffTime = Math.abs(today - lastDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        // If > 1 day has passed since last check-in, streak is broken
+        if (diffDays > 1) isStreakBroken = true;
+    }
+
     const checkinModal = document.getElementById('checkin-modal');
     checkinModal.classList.add('open');
     checkinModal.classList.remove('invisible', 'opacity-0');
     
     const calendarContainer = document.getElementById('checkin-modal-calendar');
-    calendarContainer.innerHTML = '';
-    
-    const today = new Date(); 
-    for (let i = -3; i <= 3; i++) {
-        const d = new Date(today);
-        d.setDate(today.getDate() + i);
-        const isToday = i === 0;
-        
-        calendarContainer.innerHTML += `
-            <div class="flex flex-col items-center text-xs ${isToday ? 'font-bold text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}">
-                <span class="mb-1">${['S','M','T','W','T','F','S'][d.getDay()]}</span>
-                <span class="w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-yellow-100 dark:bg-yellow-900' : ''}">${d.getDate()}</span>
+    const streakDisplay = document.getElementById('checkin-modal-streak');
+    const btnContainer = document.getElementById('checkin-modal-button-container');
+
+    // 1. IF STREAK BROKEN: Show Restore UI
+    if (isStreakBroken && state.currentUser.checkInStreak > 0) {
+        streakDisplay.innerHTML = `<span class="text-red-500">Streak Lost!</span>`;
+        calendarContainer.innerHTML = `
+            <div class="text-center w-full mb-2">
+                <i data-lucide="flame-off" class="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-3"></i>
+                <p class="text-gray-600 dark:text-gray-300 text-sm">You missed a day! Your ${state.currentUser.checkInStreak}-day streak is at risk.</p>
             </div>`;
+        
+        btnContainer.innerHTML = `
+            <div class="flex flex-col gap-3 w-full">
+                <button onclick="handleRestoreStreak()" class="w-full bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform">
+                    <i data-lucide="zap" class="w-5 h-5 fill-current"></i>
+                    <span>Restore Streak (-50 Pts)</span>
+                </button>
+                <button onclick="handleDailyCheckin()" class="w-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-bold py-3 px-4 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
+                    Start Over (0 Days)
+                </button>
+            </div>
+        `;
+    } 
+    // 2. NORMAL CHECK-IN
+    else {
+        streakDisplay.textContent = `${state.currentUser.checkInStreak || 0} Days`;
+        calendarContainer.innerHTML = '';
+        const today = new Date(); 
+        for (let i = -3; i <= 3; i++) {
+            const d = new Date(today);
+            d.setDate(today.getDate() + i);
+            const isToday = i === 0;
+            calendarContainer.innerHTML += `
+                <div class="flex flex-col items-center text-xs ${isToday ? 'font-bold text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}">
+                    <span class="mb-1">${['S','M','T','W','T','F','S'][d.getDay()]}</span>
+                    <span class="w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-yellow-100 dark:bg-yellow-900' : ''}">${d.getDate()}</span>
+                </div>`;
+        }
+        btnContainer.innerHTML = `
+            <button onclick="handleDailyCheckin()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 shadow-lg transition-transform active:scale-95">
+                Check-in &amp; Earn ${state.checkInReward} Points
+            </button>`;
     }
-    document.getElementById('checkin-modal-streak').textContent = `${state.currentUser.checkInStreak || 0} Days`;
-    document.getElementById('checkin-modal-button-container').innerHTML = `
-        <button onclick="handleDailyCheckin()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 shadow-lg transition-transform active:scale-95">
-            Check-in &amp; Earn ${state.checkInReward} Points
-        </button>`;
+    
+    if(window.lucide) window.lucide.createIcons();
+};
+
+export const handleRestoreStreak = async () => {
+    const cost = 50;
+    const userPoints = state.currentUser.current_points;
+
+    if (userPoints < cost) {
+        alert(`Insufficient EcoPoints! You need ${cost} pts to restore your streak.`);
+        return;
+    }
+
+    const btn = document.querySelector('#checkin-modal-button-container button');
+    if(btn) { btn.disabled = true; btn.innerHTML = 'Restoring...'; }
+
+    try {
+        const userId = state.currentUser.id;
+        const currentStreak = state.currentUser.checkInStreak;
+        const todayIST = getTodayIST();
+
+        // 1. Deduct Points (Manual DB update or RPC)
+        const { error: pointsError } = await supabase.rpc('deduct_points', { 
+            user_id_input: userId, 
+            points_to_deduct: cost 
+        }).maybeSingle();
+
+        if (pointsError && pointsError.code !== 'PGRST202') { 
+             await supabase.from('users').update({ current_points: userPoints - cost }).eq('id', userId);
+        }
+
+        // 2. Log Deduction
+        await supabase.from('points_ledger').insert({
+            user_id: userId,
+            source_type: 'streak_restore',
+            points_delta: -cost,
+            description: 'Restored Streak'
+        });
+
+        // 3. Insert Check-in (DB triggers might reset streak, so we must force override next)
+        await supabase.from('daily_checkins').insert({ 
+            user_id: userId, 
+            points_awarded: state.checkInReward,
+            checkin_date: todayIST 
+        });
+
+        // 4. FORCE FIX STREAK: Manually override the streak count back to (old + 1)
+        const restoredStreakCount = currentStreak + 1;
+        const { error: streakError } = await supabase
+            .from('user_streaks')
+            .update({ 
+                current_streak: restoredStreakCount,
+                last_checkin_date: todayIST 
+            })
+            .eq('user_id', userId);
+
+        if (streakError) throw streakError;
+
+        // 5. Success
+        logUserActivity('streak_restored', `Restored streak to ${restoredStreakCount}`);
+        closeCheckinModal();
+
+        state.currentUser.checkInStreak = restoredStreakCount;
+        state.currentUser.isCheckedInToday = true;
+        state.currentUser.current_points -= cost; // Optimistic update
+        
+        renderCheckinButtonState();
+        renderDashboardUI();
+        await refreshUserData();
+        
+        // 6. NEW: Refresh Leaderboard Instantly
+        await loadLeaderboardData();
+
+        alert("Streak Restored! 🔥");
+
+    } catch (err) {
+        console.error("Restore Streak Error:", err);
+        alert("Failed to restore streak.");
+        if(btn) { btn.disabled = false; btn.innerHTML = 'Restore Streak (-50 Pts)'; }
+    }
 };
 
 export const closeCheckinModal = () => {
@@ -337,10 +470,9 @@ export const handleDailyCheckin = async () => {
         checkinButton.textContent = 'Checking in...';
     }
 
-    const optimisticStreak = (state.currentUser.checkInStreak || 0) + 1;
-
     try {
         const todayIST = getTodayIST();
+        // - Inserting to daily_checkins
         const { error } = await supabase.from('daily_checkins').insert({ 
             user_id: state.currentUser.id, 
             points_awarded: state.checkInReward,
@@ -348,16 +480,24 @@ export const handleDailyCheckin = async () => {
         });
         
         if (error) throw error;
-        logUserActivity('checkin_success', `Daily check-in completed. Streak: ${optimisticStreak}`);
+        
+        // Fetch new streak confirmed by DB
+        const { data: newStreak } = await supabase.from('user_streaks').select('current_streak').eq('user_id', state.currentUser.id).single();
+        const finalStreak = newStreak ? newStreak.current_streak : 1;
+        
+        logUserActivity('checkin_success', `Daily check-in completed.`);
         closeCheckinModal();
 
-        state.currentUser.checkInStreak = optimisticStreak;
+        state.currentUser.checkInStreak = finalStreak;
         state.currentUser.isCheckedInToday = true;
         state.currentUser.current_points += state.checkInReward; 
         
         renderCheckinButtonState();
         renderDashboardUI();
         await refreshUserData(); 
+
+        // NEW: Refresh Leaderboard Instantly
+        await loadLeaderboardData();
 
     } catch (err) {
         console.error('Check-in error:', err.message);
@@ -375,3 +515,4 @@ export const handleDailyCheckin = async () => {
 window.openCheckinModal = openCheckinModal;
 window.closeCheckinModal = closeCheckinModal;
 window.handleDailyCheckin = handleDailyCheckin;
+window.handleRestoreStreak = handleRestoreStreak;
