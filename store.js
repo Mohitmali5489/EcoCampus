@@ -48,31 +48,26 @@ export const loadStoreAndProductData = async () => {
     } catch (err) { console.error('Product Load Error:', err); }
 };
 
-// 2. Render Rewards (Two Sections: Stores & Products)
+// 2. Render Rewards
 export const renderRewards = () => {
     const container = els.productGrid;
     container.innerHTML = '';
     
-    // Change layout from Grid to Vertical Stack
     container.className = "flex flex-col gap-8 pb-10";
 
-    // --- SEARCH LOGIC ---
     const searchTerm = els.storeSearch.value.toLowerCase();
     els.storeSearchClear.classList.toggle('hidden', !searchTerm);
 
-    // Filter Stores
     let matchingStores = state.stores;
     if (searchTerm.length > 0) {
         matchingStores = state.stores.filter(s => s.name.toLowerCase().includes(searchTerm));
     }
 
-    // Filter Products
     let products = [...state.products];
     if(searchTerm.length > 0) {
         products = products.filter(p => p.name.toLowerCase().includes(searchTerm) || p.storeName.toLowerCase().includes(searchTerm));
     }
 
-    // Sort Products
     const criteria = els.sortBy.value;
     products.sort((a, b) => {
         switch (criteria) {
@@ -84,7 +79,6 @@ export const renderRewards = () => {
         }
     });
 
-    // --- SECTION 1: STORES (Horizontal Scroll) ---
     if (matchingStores.length > 0) {
         const storesSection = document.createElement('div');
         storesSection.className = "w-full";
@@ -111,12 +105,10 @@ export const renderRewards = () => {
         container.appendChild(storesSection);
     }
 
-    // --- SECTION 2: PRODUCTS (Grid) ---
     if (products.length > 0) {
         const productsSection = document.createElement('div');
         productsSection.className = "w-full";
         
-        // Generate Product Cards HTML
         const productsHTML = products.map(p => {
             const imageUrl = (p.images && p.images[0]) ? p.images[0] : getPlaceholderImage('300x225');
             return `
@@ -155,7 +147,6 @@ export const renderRewards = () => {
         container.appendChild(productsSection);
     }
 
-    // Empty State
     if (products.length === 0 && matchingStores.length === 0) { 
         container.innerHTML = `
             <div class="flex flex-col items-center justify-center py-20 opacity-60">
@@ -240,7 +231,6 @@ export const showProductDetailPage = (productId) => {
     const product = getProduct(productId);
     if (!product) return;
 
-    // Log Activity
     logUserActivity('view_product', `Viewed product: ${product.name}`, { productId, storeId: product.store_id });
 
     const imageUrl = (product.images && product.images.length > 0) ? product.images[0] : getPlaceholderImage();
@@ -366,11 +356,20 @@ export const confirmPurchase = async (productId) => {
 // 6. My Rewards
 export const loadUserRewardsData = async () => {
     try {
-        const { data, error } = await supabase.from('orders').select(`id, created_at, status, order_items ( products ( id, name, product_images ( image_url ), stores ( name ) ) )`).eq('user_id', state.currentUser.id).order('created_at', { ascending: false });
+        // Added updated_at to the query
+        const { data, error } = await supabase.from('orders').select(`id, created_at, updated_at, status, order_items ( products ( id, name, product_images ( image_url ), stores ( name ) ) )`).eq('user_id', state.currentUser.id).order('created_at', { ascending: false });
         if (error) return;
         state.userRewards = data.map(order => {
             const item = order.order_items[0]; if (!item) return null;
-            return { userRewardId: order.id, purchaseDate: formatDate(order.created_at), status: order.status, productName: item.products.name, storeName: item.products.stores.name, productImage: (item.products.product_images[0] && item.products.product_images[0].image_url) || getPlaceholderImage() };
+            return { 
+                userRewardId: order.id, 
+                purchaseDate: formatDate(order.created_at), 
+                redeemedAt: order.updated_at ? formatDate(order.updated_at) : null,
+                status: order.status, 
+                productName: item.products.name, 
+                storeName: item.products.stores.name, 
+                productImage: (item.products.product_images[0] && item.products.product_images[0].image_url) || getPlaceholderImage() 
+            };
         }).filter(Boolean);
         if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage();
     } catch (err) { console.error('User Rewards Load Error:', err); }
@@ -390,9 +389,18 @@ export const renderMyRewardsPage = () => {
     state.userRewards.forEach(ur => {
         let statusBadge = '';
         let actionButton = '';
-        const isConfirmed = ur.status === 'confirmed';
         
-        if (isConfirmed) {
+        if (ur.status === 'redeemed') {
+            // Logic for redeemed status
+            statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 uppercase tracking-wide">Redeemed</span>`;
+            actionButton = `
+                <div class="w-full bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mt-3 text-center border border-gray-100 dark:border-gray-700">
+                    <p class="text-xs text-gray-500 dark:text-gray-400 font-bold flex items-center justify-center gap-1">
+                        <i data-lucide="check-circle" class="w-3 h-3 text-green-500"></i>
+                        Redeemed on ${ur.redeemedAt}
+                    </p>
+                </div>`;
+        } else if (ur.status === 'confirmed') {
             statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400 uppercase tracking-wide">Ready</span>`;
             actionButton = `<button onclick="openRewardQrModal('${ur.userRewardId}')" class="flex items-center justify-center gap-2 bg-gray-900 dark:bg-white text-white dark:text-gray-900 px-4 py-2.5 rounded-xl shadow-lg shadow-gray-200 dark:shadow-none active:scale-95 transition-all w-full mt-3 group"><i data-lucide="qr-code" class="w-4 h-4 group-hover:scale-110 transition-transform"></i><span class="text-xs font-bold">Show QR Code</span></button>`;
         } else {
@@ -468,7 +476,6 @@ export const renderEcoPointsPage = () => {
         }).join('');
     }
     
-    // FIX: Correct insertion logic for the "How to Earn" card
     let earnCard = document.getElementById('how-to-earn-card');
     if (!earnCard) {
         const recentActivityCard = document.getElementById('ecopoints-recent-activity')?.closest('.glass-card');
