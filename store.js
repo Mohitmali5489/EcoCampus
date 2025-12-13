@@ -6,16 +6,28 @@ import { refreshUserData } from './app.js';
 const getProduct = (productId) => state.products.find(p => p.id === productId);
 const getStore = (storeId) => state.stores.find(s => s.id === storeId);
 
-// 1. Load Data & Extract Stores
+// 1. Load Data & Extract Stores (Once per session)
 export const loadStoreAndProductData = async () => {
+    // Flag Check
+    if (state.storeLoaded) {
+        if (document.getElementById('rewards').classList.contains('active')) renderRewards();
+        return;
+    }
+
     try {
-        const { data, error } = await supabase.from('products').select(`
-                id, name, description, original_price, discounted_price, ecopoints_cost, store_id, metadata,
+        // Optimization: Strict Columns, Removed Metadata, Limit 50
+        const { data, error } = await supabase
+            .from('products')
+            .select(`
+                id, name, description, original_price, discounted_price, ecopoints_cost, store_id,
                 stores ( id, name, logo_url ), 
                 product_images ( image_url, sort_order ),
                 product_features ( feature, sort_order ),
                 product_specifications ( spec_key, spec_value, sort_order )
-            `).eq('is_active', true);
+            `)
+            .eq('is_active', true)
+            .limit(50); // Hard Limit
+
         if (error) throw error;
 
         state.products = data.map(p => ({
@@ -43,6 +55,7 @@ export const loadStoreAndProductData = async () => {
             }
         });
         state.stores = Array.from(storeMap.values());
+        state.storeLoaded = true;
 
         if (document.getElementById('rewards').classList.contains('active')) renderRewards();
     } catch (err) { console.error('Product Load Error:', err); }
@@ -225,7 +238,6 @@ export const openStorePage = (storeId) => {
     if(window.lucide) window.lucide.createIcons();
 }
 
-
 // 4. Product Detail
 export const showProductDetailPage = (productId) => {
     const product = getProduct(productId);
@@ -240,7 +252,6 @@ export const showProductDetailPage = (productId) => {
 
     els.productDetailPage.innerHTML = `
         <div class="relative w-full h-full bg-white dark:bg-gray-950 overflow-y-auto no-scrollbar pb-28">
-            
             <div class="relative w-full h-[60vh] md:h-[50vh] flex-shrink-0">
                 <img src="${imageUrl}" class="w-full h-full object-cover" onerror="this.src='${getPlaceholderImage()}'">
                 <button onclick="showPage('rewards')" class="absolute top-6 left-6 p-2 bg-black/30 backdrop-blur-md rounded-full text-white hover:bg-black/50 transition-all z-20">
@@ -248,25 +259,20 @@ export const showProductDetailPage = (productId) => {
                 </button>
                 <div class="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-white dark:from-gray-950 to-transparent"></div>
             </div>
-
             <div class="relative px-6 -mt-10 z-10 bg-white dark:bg-gray-950 rounded-t-[2.5rem] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] dark:shadow-none min-h-[50vh] max-w-4xl mx-auto">
                 <div class="w-12 h-1.5 bg-gray-300 dark:bg-gray-700 rounded-full mx-auto mb-6 mt-3 opacity-50"></div>
-
                 <div class="mb-6">
                     <h1 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white mb-3 leading-tight">${product.name}</h1>
-                    
                     <div onclick="openStorePage('${product.store_id}')" class="inline-flex items-center gap-2 px-3 py-1.5 bg-gray-100 dark:bg-gray-800 rounded-full mb-4 cursor-pointer active:scale-95 transition-transform">
                          <img src="${product.storeLogo || getPlaceholderImage('20x20')}" class="w-5 h-5 rounded-full">
                          <span class="text-xs font-bold text-gray-700 dark:text-gray-300">Sold by ${product.storeName}</span>
                          <i data-lucide="chevron-right" class="w-3 h-3 text-gray-400"></i>
                     </div>
-
                     <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-2">Description</h3>
                     <p class="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
                         ${product.description || 'A beautifully handcrafted item designed to express heartfelt emotions in a timeless way.'}
                     </p>
                 </div>
-
                 <div class="mb-8">
                     <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Highlights</h3>
                     <div class="space-y-3">
@@ -278,7 +284,6 @@ export const showProductDetailPage = (productId) => {
                         `).join('')}
                     </div>
                 </div>
-
                 <div class="mb-8">
                     <h3 class="text-base font-bold text-gray-900 dark:text-white mb-3">Specifications</h3>
                     <div class="grid grid-cols-2 gap-3">
@@ -290,13 +295,11 @@ export const showProductDetailPage = (productId) => {
                         `).join('')}
                     </div>
                 </div>
-
                 <div class="mb-4 p-5 bg-indigo-50 dark:bg-indigo-900/20 rounded-2xl border border-indigo-100 dark:border-indigo-800/30">
                     <div class="flex items-center gap-2 mb-2"><i data-lucide="qr-code" class="w-5 h-5 text-indigo-600 dark:text-indigo-400"></i><h3 class="text-sm font-bold text-indigo-900 dark:text-indigo-100">How to Redeem</h3></div>
                     <p class="text-xs text-indigo-700 dark:text-indigo-300 leading-relaxed">Purchase this item using points. A QR code will be generated which you must show at the <strong>${product.storeName}</strong> counter to claim your item.</p>
                 </div>
             </div>
-
             <div class="absolute bottom-0 left-0 right-0 p-4 bg-white dark:bg-gray-950 border-t border-gray-200 dark:border-gray-800 z-50 max-w-4xl mx-auto flex items-center justify-between pb-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)] dark:shadow-none">
                 <div>
                     <p class="text-xs text-gray-400 line-through font-medium mb-0.5">₹${product.original_price}</p>
@@ -338,27 +341,81 @@ export const confirmPurchase = async (productId) => {
         const confirmBtn = document.getElementById('confirm-purchase-btn');
         confirmBtn.disabled = true; confirmBtn.textContent = 'Processing...';
         
-        const { data: orderData, error: orderError } = await supabase.from('orders').insert({ user_id: state.currentUser.id, store_id: product.store_id, status: 'pending', total_points: product.ecopoints_cost, total_price: product.discounted_price, requires_approval: false }).select().single();
+        // 1. Insert Order
+        const { data: orderData, error: orderError } = await supabase
+            .from('orders')
+            .insert({ 
+                user_id: state.currentUser.id, 
+                store_id: product.store_id, 
+                status: 'pending', 
+                total_points: product.ecopoints_cost, 
+                total_price: product.discounted_price, 
+                requires_approval: false 
+            })
+            .select('id, created_at, status')
+            .single();
+            
         if (orderError) throw orderError;
         
+        // 2. Insert Item
         const { error: itemError } = await supabase.from('order_items').insert({ order_id: orderData.id, product_id: product.id, quantity: 1, price_each: product.discounted_price, points_each: product.ecopoints_cost });
         if (itemError) throw itemError;
         
+        // 3. Confirm Order
         const { error: confirmError } = await supabase.from('orders').update({ status: 'confirmed' }).eq('id', orderData.id);
         if (confirmError) throw confirmError;
         
+        // 4. Update Local State (No Refetch)
+        state.currentUser.current_points -= product.ecopoints_cost;
+        
+        const newReward = {
+            userRewardId: orderData.id,
+            purchaseDate: formatDate(orderData.created_at),
+            redeemedAt: null,
+            status: 'confirmed', // We set it to confirmed above
+            productName: product.name,
+            storeName: product.storeName,
+            productImage: (product.images && product.images.length > 0) ? product.images[0] : getPlaceholderImage()
+        };
+        
+        state.userRewards = [newReward, ...state.userRewards];
+        
         closePurchaseModal();
-        await Promise.all([refreshUserData(), loadUserRewardsData()]);
+        
+        // Refresh Header Points
+        const header = document.getElementById('user-points-header');
+        if(header) {
+            header.textContent = state.currentUser.current_points;
+            header.classList.add('points-pulse');
+            setTimeout(() => header.classList.remove('points-pulse'), 500);
+        }
+        
         window.showPage('my-rewards');
     } catch (err) { console.error('Purchase Failed:', err); alert(`Purchase failed: ${err.message}`); }
 };
 
 // 6. My Rewards
 export const loadUserRewardsData = async () => {
+    // Flag Check
+    if (state.userRewardsLoaded) {
+        if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage();
+        return;
+    }
+
     try {
-        // Added updated_at to the query
-        const { data, error } = await supabase.from('orders').select(`id, created_at, updated_at, status, order_items ( products ( id, name, product_images ( image_url ), stores ( name ) ) )`).eq('user_id', state.currentUser.id).order('created_at', { ascending: false });
+        // Optimization: Strict Columns, Limit 50
+        const { data, error } = await supabase
+            .from('orders')
+            .select(`
+                id, created_at, updated_at, status,
+                order_items ( products ( id, name, product_images ( image_url ), stores ( name ) ) )
+            `)
+            .eq('user_id', state.currentUser.id)
+            .order('created_at', { ascending: false })
+            .limit(50); // Hard Limit
+
         if (error) return;
+
         state.userRewards = data.map(order => {
             const item = order.order_items[0]; if (!item) return null;
             return { 
@@ -371,6 +428,9 @@ export const loadUserRewardsData = async () => {
                 productImage: (item.products.product_images[0] && item.products.product_images[0].image_url) || getPlaceholderImage() 
             };
         }).filter(Boolean);
+
+        state.userRewardsLoaded = true;
+
         if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage();
     } catch (err) { console.error('User Rewards Load Error:', err); }
 };
@@ -391,13 +451,12 @@ export const renderMyRewardsPage = () => {
         let actionButton = '';
         
         if (ur.status === 'redeemed') {
-            // Logic for redeemed status
             statusBadge = `<span class="px-2 py-0.5 rounded text-[10px] font-extrabold bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 uppercase tracking-wide">Redeemed</span>`;
             actionButton = `
                 <div class="w-full bg-gray-50 dark:bg-gray-700/50 rounded-xl p-3 mt-3 text-center border border-gray-100 dark:border-gray-700">
                     <p class="text-xs text-gray-500 dark:text-gray-400 font-bold flex items-center justify-center gap-1">
                         <i data-lucide="check-circle" class="w-3 h-3 text-green-500"></i>
-                        Redeemed on ${ur.redeemedAt}
+                        Redeemed on ${ur.redeemedAt || 'Date unknown'}
                     </p>
                 </div>`;
         } else if (ur.status === 'confirmed') {
