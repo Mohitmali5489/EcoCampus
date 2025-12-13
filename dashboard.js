@@ -1,6 +1,5 @@
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-// Make sure getIconForHistory is imported here
 import { els, formatDate, getIconForHistory, getPlaceholderImage, getTickImg, getUserInitials, getUserLevel, uploadToCloudinary, getTodayIST, logUserActivity } from './utils.js';
 import { refreshUserData } from './app.js';
 import { loadLeaderboardData } from './social.js';
@@ -8,20 +7,25 @@ import { loadLeaderboardData } from './social.js';
 // --- DASHBOARD CORE ---
 
 export const loadDashboardData = async () => {
+    // 1. One-Time Load Per Session
+    if (state.dashboardLoaded) {
+        renderDashboard();
+        return;
+    }
+
     try {
         const userId = state.currentUser.id;
         const todayIST = getTodayIST(); 
 
+        // 2. Strict Column Selection & 4. No Aggregation (Use Precomputed)
         const [
             { data: checkinData },
             { data: streakData },
             { data: impactData }
         ] = await Promise.all([
-            // Optimization: select 'id' is minimal enough
+            // Limit 1 is sufficient to check existence
             supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', todayIST).limit(1),
-            // Optimization: select only needed columns
             supabase.from('user_streaks').select('current_streak, last_checkin_date').eq('user_id', userId).single(),
-            // Optimization: Specify columns instead of '*'
             supabase.from('user_impact').select('total_plastic_kg, co2_saved_kg, events_attended').eq('user_id', userId).maybeSingle()
         ]);
         
@@ -30,6 +34,8 @@ export const loadDashboardData = async () => {
         state.currentUser.lastCheckInDate = streakData ? streakData.last_checkin_date : null; 
         state.currentUser.impact = impactData || { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
         
+        state.dashboardLoaded = true;
+
     } catch (err) {
         console.error('Dashboard Data Error:', err);
     }
@@ -70,6 +76,7 @@ const renderDashboardUI = () => {
     const impactEvents = document.getElementById('impact-events');
 
     if(impactRecycled) impactRecycled.textContent = `${(user.impact?.total_plastic_kg || 0).toFixed(1)} kg`;
+    // If element exists (it might not in all layouts)
     if(impactCo2) impactCo2.textContent = `${(user.impact?.co2_saved_kg || 0).toFixed(1)} kg`;
     if(impactEvents) impactEvents.textContent = user.impact?.events_attended || 0;
 };
@@ -188,14 +195,20 @@ const renderAQICard = (card, aqi, city) => {
 // --- HISTORY & PROFILE ---
 
 export const loadHistoryData = async () => {
+    // 1. One-Time Load Per Session
+    if (state.historyLoaded) {
+        if (document.getElementById('history').classList.contains('active')) renderHistory();
+        return;
+    }
+
     try {
+        // 3. Hard Limit (Max 20 for history page view) & Strict Columns
         const { data, error } = await supabase
             .from('points_ledger')
-            // Optimization: Only fetch columns displayed in UI
             .select('source_type, description, points_delta, created_at')
             .eq('user_id', state.currentUser.id)
             .order('created_at', { ascending: false })
-            .limit(20); // Limit is good, keep it
+            .limit(20); 
 
         if (error) return;
 
@@ -207,6 +220,8 @@ export const loadHistoryData = async () => {
             icon: getIconForHistory(item.source_type)
         }));
         
+        state.historyLoaded = true;
+
         if (document.getElementById('history').classList.contains('active')) renderHistory();
     } catch (err) { console.error('History Load Error:', err); }
 };
@@ -234,18 +249,21 @@ export const renderProfile = () => {
     const u = state.currentUser;
     if (!u) return;
     
-    logUserActivity('view_profile', 'Viewed profile page');
+    // 6. Logging Rules: Log profile view once per session
+    if (!sessionStorage.getItem('profile_view_logged')) {
+        logUserActivity('view_profile', 'Viewed profile page');
+        sessionStorage.setItem('profile_view_logged', '1');
+    }
 
     const l = getUserLevel(u.lifetime_points);
     
     const nameEl = document.getElementById('profile-name');
     const emailEl = document.getElementById('profile-email');
-    const joinedEl = document.getElementById('profile-joined'); // <--- NEW
+    const joinedEl = document.getElementById('profile-joined');
     const avatarEl = document.getElementById('profile-avatar');
     
     if(nameEl) nameEl.innerHTML = `${u.full_name} ${getTickImg(u.tick_type)}`;
     if(emailEl) emailEl.textContent = u.email;
-    // Populate Joined Date
     if(joinedEl) joinedEl.textContent = `Joined ${formatDate(u.joined_at, { month: 'long', year: 'numeric' })}`;
     if(avatarEl) avatarEl.src = u.profile_img_url || getPlaceholderImage('112x112', getUserInitials(u.full_name));
 
@@ -261,12 +279,11 @@ export const renderProfile = () => {
 
     const studentId = document.getElementById('profile-student-id');
     const course = document.getElementById('profile-course');
-    const mobile = document.getElementById('profile-mobile'); // <--- NEW
+    const mobile = document.getElementById('profile-mobile');
     const emailPersonal = document.getElementById('profile-email-personal');
     
     if(studentId) studentId.textContent = u.student_id;
     if(course) course.textContent = u.course;
-    // Populate Mobile Number
     if(mobile) mobile.textContent = u.mobile || 'Not Set'; 
     if(emailPersonal) emailPersonal.textContent = u.email;
 };
@@ -316,7 +333,6 @@ export const setupFileUploads = () => {
 
 export const openCheckinModal = () => {
     if (state.currentUser.isCheckedInToday) return;
-    logUserActivity('ui_interaction', 'Opened check-in modal');
     
     // Calculate if streak is broken
     let isStreakBroken = false;
@@ -447,7 +463,7 @@ export const handleRestoreStreak = async () => {
         renderDashboardUI();
         await refreshUserData();
         
-        await loadLeaderboardData();
+        if (state.leaderboardLoaded) await loadLeaderboardData();
 
         alert("Streak Restored! 🔥");
 
@@ -495,7 +511,7 @@ export const handleDailyCheckin = async () => {
         renderDashboardUI();
         await refreshUserData(); 
 
-        await loadLeaderboardData();
+        if (state.leaderboardLoaded) await loadLeaderboardData();
 
     } catch (err) {
         console.error('Check-in error:', err.message);
