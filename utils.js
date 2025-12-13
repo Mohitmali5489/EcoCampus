@@ -181,9 +181,15 @@ export const uploadToCloudinary = async (file) => {
 
 // --- NAVIGATION LOGIC ---
 
-export const showPage = (pageId, addToHistory = true) => {
-    logUserActivity('view_page', `Mapped to ${pageId}`);
+export const showPage = async (pageId, addToHistory = true) => {
+    // 1. DEDUPLICATED LOGGING: Log view only once per session per page
+    const pageLogKey = `page_view_${pageId}`;
+    if (!sessionStorage.getItem(pageLogKey)) {
+        logUserActivity('view_page', `Mapped to ${pageId}`);
+        sessionStorage.setItem(pageLogKey, '1');
+    }
 
+    // UI Reset
     const main = document.querySelector('.main-content');
     if (main) main.style.backgroundColor = ''; 
     
@@ -199,44 +205,120 @@ export const showPage = (pageId, addToHistory = true) => {
         hd.classList.remove('dark'); 
     }
 
+    // Toggle Pages
     els.pages.forEach(p => p.classList.remove('active'));
-    
     const targetPage = document.getElementById(pageId);
     if (targetPage) targetPage.classList.add('active');
 
+    // Clean up Detail Views
     if (!['store-detail-page', 'product-detail-page'].includes(pageId)) {
-        els.storeDetailPage.innerHTML = ''; els.productDetailPage.innerHTML = '';
+        if(els.storeDetailPage) els.storeDetailPage.innerHTML = '';
+        if(els.productDetailPage) els.productDetailPage.innerHTML = '';
     }
-    if (pageId !== 'department-detail-page') els.departmentDetailPage.innerHTML = '';
+    if (pageId !== 'department-detail-page' && els.departmentDetailPage) {
+        els.departmentDetailPage.innerHTML = '';
+    }
 
+    // Nav State
     document.querySelectorAll('.nav-item, .sidebar-nav-item').forEach(btn => {
         const onclickVal = btn.getAttribute('onclick');
         btn.classList.toggle('active', onclickVal && onclickVal.includes(`'${pageId}'`));
     });
 
-    document.querySelector('.main-content').scrollTop = 0;
-
-    if (addToHistory) {
-        window.history.pushState({ pageId: pageId }, '', `#${pageId}`);
-    }
-
+    if (main) main.scrollTop = 0;
+    if (addToHistory) window.history.pushState({ pageId: pageId }, '', `#${pageId}`);
     if (els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
 
-    if (pageId === 'dashboard') renderDashboard(); 
-    else if (pageId === 'leaderboard') showLeaderboardTab('student'); 
-    else if (pageId === 'rewards') window.renderRewardsWrapper && window.renderRewardsWrapper(); 
-    else if (pageId === 'my-rewards') window.renderMyRewardsPageWrapper && window.renderMyRewardsPageWrapper(); 
-    else if (pageId === 'history') renderHistory(); 
-    else if (pageId === 'ecopoints') window.renderEcoPointsPageWrapper && window.renderEcoPointsPageWrapper(); 
-    else if (pageId === 'challenges') window.renderChallengesPageWrapper && window.renderChallengesPageWrapper(); 
-    else if (pageId === 'events') window.renderEventsPageWrapper && window.renderEventsPageWrapper(); 
-    else if (pageId === 'profile') renderProfile();
-    else if (pageId === 'green-lens') window.renderGalleryWrapper && window.renderGalleryWrapper();
-    else if (pageId === 'plastic-log') import('./plastic-log.js').then(m => m.renderPlasticLogPage());
+    // ============================================
+    // STRICT ON-DEMAND DATA LOADING (Lazy Load)
+    // ============================================
+
+    if (pageId === 'dashboard') {
+        renderDashboard();
+    } 
+    else if (pageId === 'leaderboard') {
+        if (!state.leaderboardLoaded) {
+            const m = await import('./social.js');
+            await m.loadLeaderboardData();
+            state.leaderboardLoaded = true;
+        } 
+        // UI Guard: Only switch tabs if rendering (prevent unnecessary work)
+        showLeaderboardTab('student');
+    } 
+    else if (pageId === 'rewards') { // Store
+        if (!state.storeLoaded) {
+            const m = await import('./store.js');
+            await m.loadStoreAndProductData();
+            state.storeLoaded = true;
+        } else {
+            if (window.renderRewardsWrapper) window.renderRewardsWrapper();
+        }
+    } 
+    else if (pageId === 'my-rewards') {
+        // Fix 3: Strict check using state flag (assume userRewardsLoaded exists/is added)
+        if (!state.userRewardsLoaded) {
+            const m = await import('./store.js');
+            await m.loadUserRewardsData();
+            state.userRewardsLoaded = true;
+        } else {
+            if (window.renderMyRewardsPageWrapper) window.renderMyRewardsPageWrapper();
+        }
+    } 
+    else if (pageId === 'history') {
+        if (!state.historyLoaded) {
+            const m = await import('./dashboard.js');
+            await m.loadHistoryData();
+            state.historyLoaded = true;
+        } else {
+            renderHistory();
+        }
+    } 
+    else if (pageId === 'ecopoints') {
+        if (window.renderEcoPointsPageWrapper) window.renderEcoPointsPageWrapper();
+    } 
+    else if (pageId === 'challenges') {
+        if (!state.challengesLoaded) {
+            const m = await import('./challenges.js');
+            await m.loadChallengesData();
+            state.challengesLoaded = true;
+        } else {
+            if (window.renderChallengesPageWrapper) window.renderChallengesPageWrapper();
+        }
+    } 
+    else if (pageId === 'events') {
+        if (!state.eventsLoaded) {
+            const m = await import('./events.js');
+            await m.loadEventsData();
+            state.eventsLoaded = true;
+        } else {
+            if (window.renderEventsPageWrapper) window.renderEventsPageWrapper();
+        }
+    } 
+    else if (pageId === 'profile') {
+        renderProfile();
+    } 
+    else if (pageId === 'green-lens') { // Gallery
+        if (!state.galleryLoaded) {
+            const m = await import('./gallery.js');
+            await m.loadGalleryData();
+            state.galleryLoaded = true;
+        } else {
+            if (window.renderGalleryWrapper) window.renderGalleryWrapper();
+        }
+    } 
+    else if (pageId === 'plastic-log') {
+        // Fix 4: Clear logic
+        const m = await import('./plastic-log.js');
+        if (!state.plasticLoaded) {
+            await m.loadPlasticLogData();
+            state.plasticLoaded = true;
+        } else {
+            m.renderPlasticLogPage();
+        }
+    }
 
     if (window.innerWidth < 1024) toggleSidebar(true); 
-    
-    if(window.lucide) window.lucide.createIcons();
+    if (window.lucide) window.lucide.createIcons();
 };
 
 window.addEventListener('popstate', (event) => {
@@ -249,15 +331,19 @@ window.addEventListener('popstate', (event) => {
 
 export const toggleSidebar = (forceClose = false) => {
     if (forceClose) {
-        els.sidebar.classList.add('-translate-x-full');
-        els.sidebarOverlay.classList.add('opacity-0');
-        els.sidebarOverlay.classList.add('hidden');
+        if(els.sidebar) els.sidebar.classList.add('-translate-x-full');
+        if(els.sidebarOverlay) {
+            els.sidebarOverlay.classList.add('opacity-0');
+            els.sidebarOverlay.classList.add('hidden');
+        }
     } else {
-        els.sidebar.classList.toggle('-translate-x-full');
-        els.sidebarOverlay.classList.toggle('hidden');
-        els.sidebarOverlay.classList.toggle('opacity-0');
+        if(els.sidebar) els.sidebar.classList.toggle('-translate-x-full');
+        if(els.sidebarOverlay) {
+            els.sidebarOverlay.classList.toggle('hidden');
+            els.sidebarOverlay.classList.toggle('opacity-0');
+        }
         
-        const isOpening = !els.sidebar.classList.contains('-translate-x-full');
+        const isOpening = els.sidebar && !els.sidebar.classList.contains('-translate-x-full');
         if (isOpening) logUserActivity('ui_interaction', 'Opened Sidebar');
     }
 };
