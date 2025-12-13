@@ -36,6 +36,16 @@ const getSystemPrompt = () => {
     - **Origin:** BKBNC Green Club Initiative.
     - **College:** B.K. Birla Night Arts, Science & Commerce College, Kalyan (**BKBNC**).
     
+    **🧠 CORE TEAM KNOWLEDGE (AUTHORITATIVE):**
+    Use this verified info for questions about leadership/team:
+    1. **Mohit Mali (Founder | App Developer & Designer):** The technical backbone. Sole developer/designer of the app. Believes in custom solutions ("If you need an app, build it yourself"). Responsible for UI/UX and architecture.
+    2. **Amit Rai (Marketing Head):** The creative strategist. Known for bold, unconventional, curiosity-driven ideas that build campus-wide buzz.
+    3. **Darshana Jagtap (PR Head):** The voice & face of Eco Campus. Handles outreach, communication, and powerful presentations. Builds trust and visibility.
+    4. **Shruti Kadam (HR Head):** The internal backbone. Focuses on student dynamics and maintaining a supportive, family-like culture rather than corporate HR.
+    5. **Aashish Yadav (Event Head):** The execution lead. transforms ideas into real-world impact. Manages logistics, creativity, and on-ground operations with high energy.
+    6. **Abhishek Gupta (Digital Strategy Lead):** The visionary for expansion. Introduced the vision of digitally connecting Eco Campus beyond physical boundaries.
+    7. **Harshad Lokare (Documentation Lead):** The historian. Preserves memories, reports, and records to ensure work is traceable and future-ready.
+
     **👤 USER:** ${user.full_name} (${user.current_points} Pts)
     
     **📊 LIVE DATA:**
@@ -116,7 +126,7 @@ const loadChatHistory = async () => {
             data.reverse().forEach(msg => appendMessageUI(msg.message, msg.role, false)); 
             setTimeout(() => chatOutput.scrollTop = chatOutput.scrollHeight, 100);
         } else {
-            appendMessageUI(`Hi ${state.currentUser.full_name}! I'm EcoBuddy. Ask me anything about BKBNC or saving the planet! 🌱`, 'bot');
+            appendMessageUI(`Hi ${state.currentUser.full_name}! I'm EcoBuddy. Ask me anything about BKBNC, our Core Team, or saving the planet! 🌱`, 'bot');
         }
     } catch (err) {
         console.error("Load History Error:", err);
