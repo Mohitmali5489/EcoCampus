@@ -30,7 +30,15 @@ export let state = {
         { level: 4, title: 'Planet Protector', minPoints: 4001, nextMin: Infinity, desc: "You've reached the pinnacle of green leadership. Amazing!" }
     ],
     currentUploadChallengeId: null,
-    
-    // New: Track realtime subscriptions for proper cleanup on logout
-    activeSubscriptions: []
+
+    // Optimization: Load Flags for On-Demand Fetching
+    dashboardLoaded: false,
+    eventsLoaded: false,
+    challengesLoaded: false,
+    leaderboardLoaded: false,
+    storeLoaded: false,
+    historyLoaded: false,
+    plasticLoaded: false,
+    galleryLoaded: false,
+    chatbotLoaded: false
 };
