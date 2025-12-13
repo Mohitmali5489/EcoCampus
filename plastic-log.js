@@ -6,10 +6,10 @@ export const loadPlasticLogData = async () => {
     const container = document.getElementById('plastic-log-content');
     
     try {
-        // 1. Fetch Plastic Specific History
         const { data: history, error: historyError } = await supabase
             .from('points_ledger')
-            .select('*')
+            // Optimization
+            .select('description, points_delta, created_at') 
             .eq('user_id', state.currentUser.id)
             .eq('source_type', 'plastic')
             .order('created_at', { ascending: false });
@@ -18,15 +18,16 @@ export const loadPlasticLogData = async () => {
 
         state.plasticHistory = history || [];
 
-        // 2. Fetch Impact Stats (Refreshed)
         const { data: impact, error: impactError } = await supabase
             .from('user_impact')
-            .select('*')
+            // Optimization
+            .select('total_plastic_kg') 
             .eq('user_id', state.currentUser.id)
             .maybeSingle();
 
         if (!impactError && impact) {
-            state.currentUser.impact = impact;
+            // Merge carefully since we only fetched partial data
+            state.currentUser.impact = { ...state.currentUser.impact, ...impact };
         }
 
         if (document.getElementById('plastic-log').classList.contains('active')) {
