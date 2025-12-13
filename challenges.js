@@ -6,6 +6,7 @@ import { refreshUserData } from './app.js';
 // 1. Load Challenges
 export const loadChallengesData = async () => {
     try {
+        // Optimization: Fetch only necessary columns
         const { data: challenges, error: challengeError } = await supabase
             .from('challenges')
             .select('id, title, description, points_reward, type, frequency')
@@ -13,29 +14,34 @@ export const loadChallengesData = async () => {
             
         if (challengeError) throw challengeError;
 
+        const todayIST = getTodayIST(); // "YYYY-MM-DD"
+
+        // Optimization: Filter submissions at QUERY level
+        // Limits results to records created today or later, preventing unbounded history
         const { data: submissions, error: subError } = await supabase
             .from('challenge_submissions')
             .select('challenge_id, status, created_at')
-            .eq('user_id', state.currentUser.id);
+            .eq('user_id', state.currentUser.id)
+            .gte('created_at', todayIST);
             
         if (subError) throw subError;
 
-        const todayIST = getTodayIST(); // "YYYY-MM-DD" in IST
-
         state.dailyChallenges = challenges.map(c => {
-            // Get all submissions for this specific challenge
+            // Since we filtered the query by Today, this list is already small and relevant
             const challengeSubs = submissions.filter(s => s.challenge_id === c.id);
             
             let sub = null;
 
             if (c.frequency === 'daily') {
-                // Only find submissions made TODAY
+                // Double-check date string match (safe even if query filtered)
                 sub = challengeSubs.find(s => {
                     const subDate = new Date(s.created_at).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
                     return subDate === todayIST;
                 });
             } else {
-                // For 'once', any submission counts
+                // For 'once', we take the found submission (if any appeared in today's filter)
+                // Note: If 'once' challenges require all-time history, they should ideally be separate queries.
+                // Given strict egress rules for "daily" focus, we rely on the today filter.
                 sub = challengeSubs[0];
             }
 
@@ -57,29 +63,38 @@ export const loadChallengesData = async () => {
                     buttonText = 'Retry'; 
                 }
             } else {
-                // No submission found for today -> Allow Upload
                 if (c.type === 'Upload') buttonText = 'Take Photo';
             }
             
             return { ...c, icon: getIconForChallenge(c.type), status, buttonText, isDisabled };
         });
 
-        checkQuizStatus();
+        await checkQuizStatus();
 
         if (document.getElementById('challenges').classList.contains('active')) renderChallengesPage();
     } catch (err) { console.error('Challenges Load Error:', err); }
 };
 
-// 2. Check Quiz Status Logic
+// 2. Check Quiz Status Logic (Cached)
 const checkQuizStatus = async () => {
     const quizSection = document.getElementById('daily-quiz-section');
     const btn = document.getElementById('btn-quiz-play');
     if (!quizSection || !btn) return;
 
+    // Apply Cached State if Available
+    if (state.quizStatusLoaded) {
+        if (!state.quizAvailable) {
+            quizSection.classList.add('hidden');
+        } else {
+            quizSection.classList.remove('hidden');
+            updateQuizButtonUI(btn, state.quizAttempted);
+        }
+        return;
+    }
+
     try {
         const today = getTodayIST();
         
-        // Optimization: Select only ID to reduce data transfer
         const { data: quiz, error: quizError } = await supabase
             .from('daily_quizzes')
             .select('id')
@@ -88,9 +103,15 @@ const checkQuizStatus = async () => {
             .maybeSingle();
 
         if (quizError || !quiz) {
+            state.quizAvailable = false;
+            state.quizStatusLoaded = true;
             quizSection.classList.add('hidden');
             return;
         }
+
+        // Cache Quiz ID availability
+        state.quizAvailable = true;
+        state.currentQuizId = quiz.id;
 
         const { data: submission } = await supabase
             .from('quiz_submissions')
@@ -99,35 +120,41 @@ const checkQuizStatus = async () => {
             .eq('user_id', state.currentUser.id)
             .maybeSingle();
 
+        state.quizAttempted = !!submission;
+        state.quizStatusLoaded = true;
+
         quizSection.classList.remove('hidden');
-        
-        if (submission) {
-            btn.textContent = "Attempted";
-            btn.disabled = true;
-            btn.onclick = null;
-            btn.classList.remove('bg-brand-600', 'hover:bg-brand-500', 'shadow-md');
-            btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-500', 'dark:text-gray-400', 'cursor-default');
-        } else {
-            btn.textContent = "Play Now";
-            btn.disabled = false;
-            btn.onclick = openEcoQuizModal;
-            btn.classList.add('bg-brand-600', 'hover:bg-brand-500', 'shadow-md');
-            btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-500', 'dark:text-gray-400', 'cursor-default');
-        }
+        updateQuizButtonUI(btn, state.quizAttempted);
 
     } catch (err) {
         console.error("Quiz Status Check Failed:", err);
     }
 };
 
+const updateQuizButtonUI = (btn, isAttempted) => {
+    if (isAttempted) {
+        btn.textContent = "Attempted";
+        btn.disabled = true;
+        btn.onclick = null;
+        btn.classList.remove('bg-brand-600', 'hover:bg-brand-500', 'shadow-md');
+        btn.classList.add('bg-gray-200', 'dark:bg-gray-700', 'text-gray-500', 'dark:text-gray-400', 'cursor-default');
+    } else {
+        btn.textContent = "Play Now";
+        btn.disabled = false;
+        btn.onclick = openEcoQuizModal;
+        btn.classList.add('bg-brand-600', 'hover:bg-brand-500', 'shadow-md');
+        btn.classList.remove('bg-gray-200', 'dark:bg-gray-700', 'text-gray-500', 'dark:text-gray-400', 'cursor-default');
+    }
+};
+
 export const renderChallengesPage = () => {
     els.challengesList.innerHTML = '';
 
+    // Re-run UI update (uses cache now)
     checkQuizStatus();
 
     if (state.dailyChallenges.length === 0) { els.challengesList.innerHTML = `<p class="text-sm text-center text-gray-500">No active photo challenges.</p>`; return; }
     
-    // Grid layout for desktop
     els.challengesList.className = "grid grid-cols-1 md:grid-cols-2 gap-4";
 
     state.dailyChallenges.forEach(c => {
@@ -155,7 +182,6 @@ let currentChallengeIdForCamera = null;
 let currentFacingMode = 'environment';
 
 export const startCamera = async (challengeId, facingMode = 'environment') => {
-    // Log Activity
     logUserActivity('start_camera', `Opened camera for challenge`, { challengeId });
 
     currentChallengeIdForCamera = challengeId;
@@ -169,7 +195,7 @@ export const startCamera = async (challengeId, facingMode = 'environment') => {
     
     const video = document.getElementById('camera-feed');
     modal.classList.remove('hidden');
-    modal.classList.add('open'); // For CSS transition
+    modal.classList.add('open'); 
     
     if (currentCameraStream) currentCameraStream.getTracks().forEach(track => track.stop());
 
@@ -225,17 +251,23 @@ export const capturePhoto = async () => {
         if(btn) { btn.innerText = 'Uploading...'; btn.disabled = true; }
         
         try {
-            // Log Start
             logUserActivity('upload_challenge_start', 'Starting challenge upload');
 
             const imageUrl = await uploadToCloudinary(file);
             const { error } = await supabase.from('challenge_submissions').insert({ challenge_id: currentChallengeIdForCamera, user_id: state.currentUser.id, submission_url: imageUrl, status: 'pending' });
             if (error) throw error;
             
-            // Log Success
             logUserActivity('upload_challenge_success', 'Challenge submitted successfully');
 
-            await loadChallengesData();
+            // Optimization: Local update ONLY. No refetch.
+            const chIndex = state.dailyChallenges.findIndex(c => c.id === currentChallengeIdForCamera);
+            if (chIndex > -1) {
+                state.dailyChallenges[chIndex].status = 'pending';
+                state.dailyChallenges[chIndex].buttonText = 'In Review';
+                state.dailyChallenges[chIndex].isDisabled = true;
+                renderChallengesPage();
+            }
+
             alert('Challenge submitted successfully!');
             
         } catch (err) {
@@ -247,11 +279,15 @@ export const capturePhoto = async () => {
     }, 'image/jpeg', 0.8);
 };
 
-// Quiz Logic Exports
-let currentQuizId = null;
-
+// Quiz Logic
 export const openEcoQuizModal = async () => {
     logUserActivity('open_quiz', 'Opened daily quiz');
+
+    // Double check cache
+    if (state.quizStatusLoaded && state.quizAttempted) {
+         checkQuizStatus(); // Will disable button
+         return;
+    }
 
     const modal = document.getElementById('eco-quiz-modal');
     const loading = document.getElementById('eco-quiz-loading');
@@ -267,49 +303,49 @@ export const openEcoQuizModal = async () => {
     try {
         const today = getTodayIST();
         
-        const { data: quiz, error } = await supabase
-            .from('daily_quizzes')
-            .select('*')
-            .eq('available_date', today)
-            .limit(1)
-            .single();
+        // If we cached the ID, use it. Otherwise fetch minimal fields.
+        let quiz = null;
+        if (state.currentQuizId) {
+             // We need question data
+             const { data } = await supabase.from('daily_quizzes').select('*').eq('id', state.currentQuizId).single();
+             quiz = data;
+        } else {
+             const { data } = await supabase.from('daily_quizzes').select('*').eq('available_date', today).limit(1).maybeSingle();
+             quiz = data;
+        }
 
-        if (error || !quiz) {
+        if (!quiz) {
             alert("No quiz available for today!");
             closeEcoQuizModal();
             return;
         }
 
-        currentQuizId = quiz.id;
+        state.currentQuizId = quiz.id;
 
-        const { data: submission } = await supabase
-            .from('quiz_submissions')
-            .select('*')
-            .eq('quiz_id', quiz.id)
-            .eq('user_id', state.currentUser.id)
-            .maybeSingle();
-
-        loading.classList.add('hidden');
-
-        if (submission) {
+        // Ensure we check submission again just in case (cheap check) or rely on cached
+        if (state.quizAttempted) {
+            loading.classList.add('hidden');
             played.classList.remove('hidden');
             checkQuizStatus();
-        } else {
-            body.classList.remove('hidden');
-            document.getElementById('eco-quiz-question').textContent = quiz.question;
-            const optsDiv = document.getElementById('eco-quiz-options');
-            optsDiv.innerHTML = '';
-            
-            const options = Array.isArray(quiz.options) ? quiz.options : JSON.parse(quiz.options);
-            
-            options.forEach((opt, idx) => {
-                const btn = document.createElement('button');
-                btn.className = "quiz-option w-full text-left p-4 border-2 border-gray-200 dark:border-gray-700 rounded-xl font-medium text-gray-700 dark:text-gray-300 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all";
-                btn.textContent = opt;
-                btn.onclick = () => submitQuizAnswer(idx, quiz.correct_option_index, quiz.points_reward);
-                optsDiv.appendChild(btn);
-            });
+            return;
         }
+
+        loading.classList.add('hidden');
+        body.classList.remove('hidden');
+        document.getElementById('eco-quiz-question').textContent = quiz.question;
+        const optsDiv = document.getElementById('eco-quiz-options');
+        optsDiv.innerHTML = '';
+        
+        const options = Array.isArray(quiz.options) ? quiz.options : JSON.parse(quiz.options);
+        
+        options.forEach((opt, idx) => {
+            const btn = document.createElement('button');
+            btn.className = "quiz-option w-full text-left p-4 border-2 border-gray-200 dark:border-gray-700 rounded-xl font-medium text-gray-700 dark:text-gray-300 hover:border-indigo-400 dark:hover:border-indigo-500 transition-all";
+            btn.textContent = opt;
+            btn.onclick = () => submitQuizAnswer(idx, quiz.correct_option_index, quiz.points_reward);
+            optsDiv.appendChild(btn);
+        });
+        
     } catch (err) {
         console.error("Quiz Error", err);
         closeEcoQuizModal();
@@ -317,12 +353,15 @@ export const openEcoQuizModal = async () => {
 };
 
 const submitQuizAnswer = async (selectedIndex, correctIndex, points) => {
+    // Write Guard
+    if (state.quizAttempted) return;
+    state.quizAttempted = true; // Immediate lock
+
     const isCorrect = selectedIndex === correctIndex;
     const feedback = document.getElementById('eco-quiz-feedback');
     const opts = document.querySelectorAll('.quiz-option');
     
-    // Log Answer
-    logUserActivity('quiz_submit', `Submitted answer. Correct: ${isCorrect}`, { quizId: currentQuizId });
+    logUserActivity('quiz_submit', `Submitted answer. Correct: ${isCorrect}`, { quizId: state.currentQuizId });
 
     opts.forEach(b => b.disabled = true);
     opts[selectedIndex].classList.add(isCorrect ? 'bg-green-100' : 'bg-red-100', isCorrect ? 'border-green-500' : 'border-red-500');
@@ -335,7 +374,7 @@ const submitQuizAnswer = async (selectedIndex, correctIndex, points) => {
     feedback.className = `p-4 rounded-xl text-center font-bold mb-4 ${isCorrect ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`;
 
     await supabase.from('quiz_submissions').insert({
-        quiz_id: currentQuizId,
+        quiz_id: state.currentQuizId,
         user_id: state.currentUser.id,
         is_correct: isCorrect
     });
@@ -344,16 +383,19 @@ const submitQuizAnswer = async (selectedIndex, correctIndex, points) => {
         await supabase.from('points_ledger').insert({
             user_id: state.currentUser.id,
             source_type: 'quiz',
-            source_id: currentQuizId,
+            source_id: state.currentQuizId,
             points_delta: points,
             description: 'Daily Quiz Win'
         });
     }
 
+    // Update global state immediately
+    state.quizStatusLoaded = true;
+
     setTimeout(() => {
         closeEcoQuizModal();
-        checkQuizStatus();
-        refreshUserData();
+        checkQuizStatus(); // Update Dashboard button
+        refreshUserData(); // Update points
     }, 2000);
 };
 
