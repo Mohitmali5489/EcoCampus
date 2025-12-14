@@ -26,7 +26,7 @@ export const loadLeaderboardData = async () => {
     }
 };
 
-// 1. GLOBAL STUDENT LEADERBOARD (Top 50)
+// 1. GLOBAL STUDENT LEADERBOARD
 const loadStudentLeaderboard = async () => {
     if (state.leaderboardLoaded) {
         renderStudentLeaderboard();
@@ -40,8 +40,9 @@ const loadStudentLeaderboard = async () => {
                 id, full_name, course, lifetime_points, profile_img_url, tick_type,
                 user_streaks:user_streaks!user_streaks_user_id_fkey ( current_streak )
             `)
-            .order('lifetime_points', { ascending: false })
-            .limit(50); // Hard Limit
+            .gt('lifetime_points', 0) // Filter out users with 0 points
+            .order('lifetime_points', { ascending: false });
+            // No limit requested
 
         if (error) throw error;
 
@@ -61,8 +62,7 @@ const loadStudentLeaderboard = async () => {
     } catch (err) { console.error('Student LB Error:', err); }
 };
 
-// 2. DEPARTMENT STATS (Aggregation)
-// Strategy: Fetch lightweight columns for ALL users to calculate stats accurately.
+// 2. DEPARTMENT STATS (Aggregation via RPC)
 export const loadDepartmentLeaderboard = async () => {
     if (state.deptStatsLoaded) {
         renderDepartmentLeaderboard();
@@ -70,39 +70,17 @@ export const loadDepartmentLeaderboard = async () => {
     }
 
     try {
-        // Minimal fetch: 2 columns only. Very low egress even for 5000 users.
-        const { data, error } = await supabase
-            .from('users')
-            .select('course, lifetime_points');
+        // Use RPC to bypass 1000-row select limit and reduce egress
+        const { data, error } = await supabase.rpc('department_stats');
 
         if (error) throw error;
 
-        const deptMap = {};
-        
-        data.forEach(user => {
-            let cleanCourse = user.course ? user.course.trim().toUpperCase() : 'GENERAL';
-            // Simple normalization
-            cleanCourse = cleanCourse.replace(/^(FY|SY|TY)[\s.]?/i, '');
-            if (cleanCourse.length < 2) cleanCourse = user.course;
-
-            if (!deptMap[cleanCourse]) {
-                deptMap[cleanCourse] = { 
-                    name: cleanCourse, 
-                    totalPoints: 0, 
-                    studentCount: 0 
-                };
-            }
-
-            deptMap[cleanCourse].totalPoints += (user.lifetime_points || 0);
-            deptMap[cleanCourse].studentCount += 1;
-        });
-
-        state.departmentLeaderboard = Object.values(deptMap)
-            .map(dept => ({
-                ...dept,
-                averageScore: dept.studentCount > 0 ? Math.round(dept.totalPoints / dept.studentCount) : 0
-            }))
-            .sort((a, b) => b.averageScore - a.averageScore);
+        state.departmentLeaderboard = data.map(dept => ({
+            name: dept.department,
+            studentCount: dept.student_count,
+            averageScore: Number(dept.avg_score) // Ensure numeric type
+        }))
+        .sort((a, b) => b.averageScore - a.averageScore);
 
         state.deptStatsLoaded = true;
         renderDepartmentLeaderboard();
@@ -111,9 +89,7 @@ export const loadDepartmentLeaderboard = async () => {
 };
 
 // 3. DEPARTMENT STUDENTS (Drill Down)
-// Loads detailed list only when a specific department is clicked.
 export const loadDepartmentStudents = async (deptName) => {
-    // Check Cache
     if (state.deptCache[deptName]) {
         renderDepartmentStudents(deptName);
         return;
@@ -126,15 +102,12 @@ export const loadDepartmentStudents = async (deptName) => {
                 id, full_name, lifetime_points, profile_img_url, tick_type, course,
                 user_streaks:user_streaks!user_streaks_user_id_fkey ( current_streak )
             `)
-            // We use 'ilike' to match the normalized name broadly, or we could store normalized names.
-            // For safety on this specific schema, we search widely.
             .ilike('course', `%${deptName}%`) 
-            .order('lifetime_points', { ascending: false })
-            .limit(50); // Hard limit per department page
+            .order('lifetime_points', { ascending: false }); 
+            // No limit requested
 
         if (error) throw error;
 
-        // Process & Cache
         state.deptCache[deptName] = data.map(u => ({
             name: u.full_name,
             points: u.lifetime_points,
@@ -158,58 +131,51 @@ export const showLeaderboardTab = (tab) => {
     const contentStudent = document.getElementById('leaderboard-content-student');
     const contentDept = document.getElementById('leaderboard-content-department');
 
-    // UI Toggle
     if (tab === 'department') {
         btnDept.classList.add('active'); btnStudent.classList.remove('active');
         contentDept.classList.remove('hidden'); contentStudent.classList.add('hidden');
         if(els.lbLeafLayer) els.lbLeafLayer.classList.add('hidden');
-        
-        // Trigger Load
         loadDepartmentLeaderboard(); 
     } else {
         btnStudent.classList.add('active'); btnDept.classList.remove('active');
         contentStudent.classList.remove('hidden'); contentDept.classList.add('hidden');
         if(els.lbLeafLayer) els.lbLeafLayer.classList.remove('hidden');
-        
-        // Trigger Load
         loadStudentLeaderboard();
     }
 };
 
 export const renderDepartmentLeaderboard = () => {
     const container = document.getElementById('eco-wars-page-list');
-    container.innerHTML = '';
     
     if (state.departmentLeaderboard.length === 0) { 
         container.innerHTML = `<p class="text-sm text-center text-gray-500">Loading departments...</p>`; 
         return; 
     }
 
-    state.departmentLeaderboard.forEach((dept, index) => {
-        container.innerHTML += `
-            <div class="glass-card p-4 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors mb-3 border border-gray-100 dark:border-gray-700 active:scale-[0.98] transform duration-150" onclick="showDepartmentDetail('${dept.name}')">
-                <div class="flex items-center justify-between">
-                    <div class="flex items-center">
-                        <span class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-green-200 dark:from-emerald-900/60 dark:to-green-900/60 flex items-center justify-center mr-4 text-sm font-bold text-emerald-800 dark:text-emerald-100 shadow-sm">#${index + 1}</span>
-                        <div>
-                            <p class="font-bold text-lg text-gray-900 dark:text-gray-100">${dept.name}</p>
-                            <p class="text-xs text-gray-500 dark:text-gray-400">${dept.studentCount} Students</p>
-                        </div>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-lg font-extrabold text-green-600 dark:text-green-400">${dept.averageScore}</p>
-                        <p class="text-[10px] font-bold uppercase tracking-wider text-gray-400">Avg Score</p>
+    const html = state.departmentLeaderboard.map((dept, index) => `
+        <div class="glass-card p-4 rounded-2xl cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors mb-3 border border-gray-100 dark:border-gray-700 active:scale-[0.98] transform duration-150" onclick="showDepartmentDetail('${dept.name}')">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <span class="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-100 to-green-200 dark:from-emerald-900/60 dark:to-green-900/60 flex items-center justify-center mr-4 text-sm font-bold text-emerald-800 dark:text-emerald-100 shadow-sm">#${index + 1}</span>
+                    <div>
+                        <p class="font-bold text-lg text-gray-900 dark:text-gray-100">${dept.name}</p>
+                        <p class="text-xs text-gray-500 dark:text-gray-400">${dept.studentCount} Students</p>
                     </div>
                 </div>
-            </div>`;
-    });
+                <div class="text-right">
+                    <p class="text-lg font-extrabold text-green-600 dark:text-green-400">${dept.averageScore}</p>
+                    <p class="text-[10px] font-bold uppercase tracking-wider text-gray-400">Avg Score</p>
+                </div>
+            </div>
+        </div>`).join('');
+        
+    container.innerHTML = html;
 };
 
 export const showDepartmentDetail = (deptName) => {
     const deptData = state.departmentLeaderboard.find(d => d.name === deptName);
     if (!deptData) return;
 
-    // Show page structure immediately with loader
     els.departmentDetailPage.innerHTML = `
         <div class="max-w-3xl mx-auto h-full flex flex-col">
             <div class="sticky top-0 bg-white/95 dark:bg-gray-900/95 backdrop-blur-md z-10 p-4 border-b border-gray-200 dark:border-gray-800 flex items-center justify-between">
@@ -224,17 +190,14 @@ export const showDepartmentDetail = (deptName) => {
                 </div>
             </div>
             <div id="dept-students-list" class="p-4 space-y-3 pb-20 overflow-y-auto">
-                <p class="text-center text-gray-500 py-10">Loading top students...</p>
+                <p class="text-center text-gray-500 py-10">Loading students...</p>
             </div>
         </div>`;
 
     window.showPage('department-detail-page');
     if(window.lucide) window.lucide.createIcons();
 
-    // Log Activity
     logUserActivity('view_department', `Viewed details for ${deptName}`);
-
-    // Fetch Data
     loadDepartmentStudents(deptName);
 };
 
@@ -248,7 +211,7 @@ export const renderDepartmentStudents = (deptName) => {
         return;
     }
 
-    container.innerHTML = students.map((s, idx) => {
+    const html = students.map((s, idx) => {
         const optimizedImg = getOptimizedImgUrl(s.img) || getPlaceholderImage('60x60', s.initials);
         return `
         <div class="glass-card p-3 rounded-2xl flex items-center justify-between border-b border-gray-100 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
@@ -273,9 +236,10 @@ export const renderDepartmentStudents = (deptName) => {
                 <span class="text-sm font-extrabold text-green-600 dark:text-green-400">${s.points}</span>
                 <span class="text-[10px] text-gray-400 block font-medium">PTS</span>
             </div>
-        </div>
-    `}).join('');
-    
+        </div>`;
+    }).join('');
+
+    container.innerHTML = html;
     if(window.lucide) window.lucide.createIcons();
 };
 
@@ -310,12 +274,9 @@ export const renderStudentLeaderboard = () => {
             <div class="champ">${renderChamp(rank3, 3)}</div>
         </div>`;
 
-    els.lbList.innerHTML = '';
-    
-    rest.forEach((user, index) => {
+    const html = rest.map((user, index) => {
         const optimizedImg = getOptimizedImgUrl(user.profile_img_url) || getPlaceholderImage('40x40', user.initials);
-        
-        els.lbList.innerHTML += `
+        return `
             <div class="item ${user.isCurrentUser ? 'is-me' : ''}">
                 <div class="user">
                     <span class="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center mr-3 text-xs font-bold text-gray-600 dark:text-gray-300">#${index + 4}</span>
@@ -327,8 +288,9 @@ export const renderStudentLeaderboard = () => {
                 </div>
                 <div class="points-display">${user.lifetime_points} pts</div>
             </div>`;
-    });
-    if(window.lucide) window.lucide.createIcons();
+    }).join('');
+
+    els.lbList.innerHTML = html;
 };
 
 // Exports for global access
