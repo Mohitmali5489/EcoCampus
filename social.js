@@ -29,11 +29,11 @@ export const loadLeaderboardData = async () => {
     if (currentLeaderboardTab === 'student') {
         await loadStudentLeaderboard();
     } else {
-        await renderDepartmentLeaderboard(); // Directly render from static data
+        await renderDepartmentLeaderboard(); 
     }
 };
 
-// 1. GLOBAL STUDENT LEADERBOARD
+// GLOBAL STUDENT LEADERBOARD
 const loadStudentLeaderboard = async () => {
     if (state.leaderboardLoaded) {
         renderStudentLeaderboard();
@@ -49,7 +49,7 @@ const loadStudentLeaderboard = async () => {
             `)
             .gt('lifetime_points', 0) 
             .order('lifetime_points', { ascending: false })
-            .limit(50); // Hard limit for egress
+            .limit(50); 
 
         if (error) throw error;
 
@@ -69,7 +69,7 @@ const loadStudentLeaderboard = async () => {
     } catch (err) { console.error('Student LB Error:', err); }
 };
 
-// 2. DRILL DOWN: DEPARTMENT STUDENTS
+// DRILL DOWN: DEPARTMENT STUDENTS
 export const loadDepartmentStudents = async (deptName) => {
     if (state.deptCache[deptName]) {
         renderDepartmentStudents(deptName);
@@ -80,11 +80,11 @@ export const loadDepartmentStudents = async (deptName) => {
         const { data, error } = await supabase
             .from('users')
             .select(`
-                id, full_name, profile_img_url, tick_type, course,
+                id, full_name, profile_img_url, tick_type, course, lifetime_points,
                 user_streaks:user_streaks!user_streaks_user_id_fkey ( current_streak )
             `)
             .ilike('course', `%${deptName}`) 
-            .order('full_name', { ascending: true }); // Alphabetical for searching
+            .order('lifetime_points', { ascending: false }); // SORTED: High to Low
 
         if (error) throw error;
 
@@ -93,6 +93,7 @@ export const loadDepartmentStudents = async (deptName) => {
             img: u.profile_img_url,
             tick_type: u.tick_type,
             course: u.course,
+            points: u.lifetime_points, // Added to local state
             initials: getUserInitials(u.full_name),
             streak: (u.user_streaks && u.user_streaks.current_streak) 
                 ? (Array.isArray(u.user_streaks) ? u.user_streaks[0]?.current_streak : u.user_streaks.current_streak) 
@@ -103,14 +104,12 @@ export const loadDepartmentStudents = async (deptName) => {
     } catch (err) { console.error('Dept Students Error:', err); }
 };
 
-// --- UPDATED RENDER: DEPARTMENT LIST ---
 export const renderDepartmentLeaderboard = () => {
     const container = document.getElementById('eco-wars-page-list');
     if (!container) return;
 
-    // Use local DEPT_STATS_FIXED instead of Supabase RPC
     const entries = Object.entries(DEPT_STATS_FIXED)
-        .sort((a, b) => b[1].avg - a[1].avg); // Sort by avg score
+        .sort((a, b) => b[1].avg - a[1].avg);
 
     container.innerHTML = entries.map(([name, data], index) => `
         <div class="glass-card p-4 rounded-2xl cursor-pointer active:scale-[0.98] transition-all mb-3 border border-gray-100 dark:border-gray-700" onclick="showDepartmentDetail('${name}')">
@@ -165,7 +164,7 @@ export const showDepartmentDetail = (deptName) => {
     loadDepartmentStudents(deptName);
 };
 
-// --- UPDATED LIST UI: NAME + STREAK FIRE BELOW ---
+// UPDATED LIST UI: POINTS ON RIGHT, STREAK BELOW NAME
 const renderFilteredList = (students) => {
     const container = document.getElementById('dept-students-list');
     if (!container) return;
@@ -189,7 +188,10 @@ const renderFilteredList = (students) => {
                     <span class="text-[11px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-tighter">${s.streak} Day Streak</span>
                 </div>
             </div>
-            <div class="flex-shrink-0 text-[10px] font-bold text-gray-300 uppercase tracking-widest px-2">${s.course}</div>
+            <div class="text-right">
+                <span class="text-sm font-black text-green-600 dark:text-green-400">${s.points}</span>
+                <span class="text-[10px] text-gray-400 block font-bold uppercase tracking-tighter leading-none">Pts</span>
+            </div>
         </div>`;
     }).join('');
     
