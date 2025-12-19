@@ -1,21 +1,31 @@
+/**
+ * EcoCampus - Store & Rewards Module (store.js)
+ * Fully updated with Toast Notifications and Mobile-Optimized UI.
+ */
+
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, getPlaceholderImage, formatDate, getUserLevel, logUserActivity, isLowDataMode } from './utils.js';
+import { els, getPlaceholderImage, formatDate, getUserLevel, logUserActivity, isLowDataMode, showToast } from './utils.js';
 import { refreshUserData } from './app.js';
 
+// Helper Accessors
 const getProduct = (productId) => state.products.find(p => p.id === productId);
 const getStore = (storeId) => state.stores.find(s => s.id === storeId);
 
-// 1. Load Data & Extract Stores (Once per session)
+// --- 1. DATA LOADING ---
+
+/**
+ * Loads Stores and Products once per session.
+ * Uses strict column selection to minimize bandwidth.
+ */
 export const loadStoreAndProductData = async () => {
-    // Flag Check
+    // Flag Check to prevent re-fetching
     if (state.storeLoaded) {
         if (document.getElementById('rewards').classList.contains('active')) renderRewards();
         return;
     }
 
     try {
-        // Optimization: Strict Columns, Removed Metadata, Limit 50
         const { data, error } = await supabase
             .from('products')
             .select(`
@@ -26,10 +36,11 @@ export const loadStoreAndProductData = async () => {
                 product_specifications ( spec_key, spec_value, sort_order )
             `)
             .eq('is_active', true)
-            .limit(50); // Hard Limit
+            .limit(50); // Hard Limit for performance
 
         if (error) throw error;
 
+        // Process and map data
         state.products = data.map(p => ({
             ...p, 
             images: p.product_images?.sort((a,b) => a.sort_order - b.sort_order).map(img => img.image_url) || [],
@@ -40,6 +51,7 @@ export const loadStoreAndProductData = async () => {
             popularity: Math.floor(Math.random() * 50) 
         }));
 
+        // Extract unique stores
         const storeMap = new Map();
         state.products.forEach(p => {
             if (p.stores && !storeMap.has(p.stores.id)) {
@@ -58,10 +70,14 @@ export const loadStoreAndProductData = async () => {
         state.storeLoaded = true;
 
         if (document.getElementById('rewards').classList.contains('active')) renderRewards();
-    } catch (err) { console.error('Product Load Error:', err); }
+    } catch (err) { 
+        console.error('Product Load Error:', err); 
+        showToast('Failed to load store items.', 'error');
+    }
 };
 
-// 2. Render Rewards
+// --- 2. MAIN STORE LIST RENDERING ---
+
 export const renderRewards = () => {
     const container = els.productGrid;
     container.innerHTML = '';
@@ -71,16 +87,19 @@ export const renderRewards = () => {
     const searchTerm = els.storeSearch.value.toLowerCase();
     els.storeSearchClear.classList.toggle('hidden', !searchTerm);
 
+    // Filter Stores
     let matchingStores = state.stores;
     if (searchTerm.length > 0) {
         matchingStores = state.stores.filter(s => s.name.toLowerCase().includes(searchTerm));
     }
 
+    // Filter Products
     let products = [...state.products];
     if(searchTerm.length > 0) {
         products = products.filter(p => p.name.toLowerCase().includes(searchTerm) || p.storeName.toLowerCase().includes(searchTerm));
     }
 
+    // Sort Products
     const criteria = els.sortBy.value;
     products.sort((a, b) => {
         switch (criteria) {
@@ -92,6 +111,7 @@ export const renderRewards = () => {
         }
     });
 
+    // Render Store Carousel (Horizontal Scroll)
     if (matchingStores.length > 0) {
         const storesSection = document.createElement('div');
         storesSection.className = "w-full";
@@ -118,6 +138,7 @@ export const renderRewards = () => {
         container.appendChild(storesSection);
     }
 
+    // Render Product Grid
     if (products.length > 0) {
         const productsSection = document.createElement('div');
         productsSection.className = "w-full";
@@ -160,6 +181,7 @@ export const renderRewards = () => {
         container.appendChild(productsSection);
     }
 
+    // Empty State
     if (products.length === 0 && matchingStores.length === 0) { 
         container.innerHTML = `
             <div class="flex flex-col items-center justify-center py-20 opacity-60">
@@ -171,7 +193,8 @@ export const renderRewards = () => {
     if(window.lucide) window.lucide.createIcons();
 };
 
-// 3. Store Page
+// --- 3. INDIVIDUAL STORE PAGE ---
+
 export const openStorePage = (storeId) => {
     const store = getStore(storeId);
     if (!store) return;
@@ -238,7 +261,8 @@ export const openStorePage = (storeId) => {
     if(window.lucide) window.lucide.createIcons();
 }
 
-// 4. Product Detail
+// --- 4. PRODUCT DETAIL PAGE ---
+
 export const showProductDetailPage = (productId) => {
     const product = getProduct(productId);
     if (!product) return;
@@ -247,8 +271,8 @@ export const showProductDetailPage = (productId) => {
 
     const imageUrl = (product.images && product.images.length > 0) ? product.images[0] : getPlaceholderImage();
     const canAfford = state.currentUser.current_points >= product.ecopoints_cost;
-    const highlights = product.highlights.length > 0 ? product.highlights : ['Handwritten-style love letter', 'Burnt-edge design', 'Personalized message', 'Ideal for gifts'];
-    const specs = product.specs.length > 0 ? product.specs : [{ spec_key: 'FINISH', spec_value: 'Matte handcrafted' }, { spec_key: 'PRODUCT_TYPE', spec_value: 'Vintage Letter' }];
+    const highlights = product.highlights.length > 0 ? product.highlights : ['Ideal for daily use', 'Sustainable materials', 'Green Club Approved', 'Limited Stock'];
+    const specs = product.specs.length > 0 ? product.specs : [{ spec_key: 'CATEGORY', spec_value: 'Eco Friendly' }, { spec_key: 'CONDITION', spec_value: 'New' }];
 
     els.productDetailPage.innerHTML = `
         <div class="relative w-full h-full bg-white dark:bg-gray-950 overflow-y-auto no-scrollbar pb-28">
@@ -270,7 +294,7 @@ export const showProductDetailPage = (productId) => {
                     </div>
                     <h3 class="text-sm font-bold text-gray-900 dark:text-white mb-2">Description</h3>
                     <p class="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
-                        ${product.description || 'A beautifully handcrafted item designed to express heartfelt emotions in a timeless way.'}
+                        ${product.description || 'A sustainable choice for the conscious student.'}
                     </p>
                 </div>
                 <div class="mb-8">
@@ -317,7 +341,8 @@ export const showProductDetailPage = (productId) => {
     if(window.lucide) window.lucide.createIcons();
 };
 
-// 5. Purchase Modal Logic
+// --- 5. REDEMPTION & PURCHASE LOGIC ---
+
 export const openPurchaseModal = (productId) => {
     const product = getProduct(productId);
     if (!product) return;
@@ -337,11 +362,16 @@ export const closePurchaseModal = () => {
 export const confirmPurchase = async (productId) => {
     try {
         const product = getProduct(productId);
-        if (!product || state.currentUser.current_points < product.ecopoints_cost) { alert("You do not have enough points."); return; }
+        // Validation check
+        if (!product || state.currentUser.current_points < product.ecopoints_cost) { 
+            showToast("Insufficient EcoPoints!", "warning");
+            return; 
+        }
+
         const confirmBtn = document.getElementById('confirm-purchase-btn');
         confirmBtn.disabled = true; confirmBtn.textContent = 'Processing...';
         
-        // 1. Insert Order
+        // 1. Create Order
         const { data: orderData, error: orderError } = await supabase
             .from('orders')
             .insert({ 
@@ -357,22 +387,22 @@ export const confirmPurchase = async (productId) => {
             
         if (orderError) throw orderError;
         
-        // 2. Insert Item
+        // 2. Add Order Item
         const { error: itemError } = await supabase.from('order_items').insert({ order_id: orderData.id, product_id: product.id, quantity: 1, price_each: product.discounted_price, points_each: product.ecopoints_cost });
         if (itemError) throw itemError;
         
-        // 3. Confirm Order
+        // 3. Auto-Confirm Order (For MVP)
         const { error: confirmError } = await supabase.from('orders').update({ status: 'confirmed' }).eq('id', orderData.id);
         if (confirmError) throw confirmError;
         
-        // 4. Update Local State (No Refetch)
+        // 4. Update Local State (No Refetch needed immediately)
         state.currentUser.current_points -= product.ecopoints_cost;
         
         const newReward = {
             userRewardId: orderData.id,
             purchaseDate: formatDate(orderData.created_at),
             redeemedAt: null,
-            status: 'confirmed', // We set it to confirmed above
+            status: 'confirmed',
             productName: product.name,
             storeName: product.storeName,
             productImage: (product.images && product.images.length > 0) ? product.images[0] : getPlaceholderImage()
@@ -381,8 +411,9 @@ export const confirmPurchase = async (productId) => {
         state.userRewards = [newReward, ...state.userRewards];
         
         closePurchaseModal();
+        showToast("Purchase Successful! 🎁", "success");
         
-        // Refresh Header Points
+        // Update Header Points UI
         const header = document.getElementById('user-points-header');
         if(header) {
             header.textContent = state.currentUser.current_points;
@@ -391,19 +422,21 @@ export const confirmPurchase = async (productId) => {
         }
         
         window.showPage('my-rewards');
-    } catch (err) { console.error('Purchase Failed:', err); alert(`Purchase failed: ${err.message}`); }
+    } catch (err) { 
+        console.error('Purchase Failed:', err); 
+        showToast("Purchase failed. Please try again.", "error");
+    }
 };
 
-// 6. My Rewards
+// --- 6. MY REWARDS & HISTORY ---
+
 export const loadUserRewardsData = async () => {
-    // Flag Check
     if (state.userRewardsLoaded) {
         if (document.getElementById('my-rewards').classList.contains('active')) renderMyRewardsPage();
         return;
     }
 
     try {
-        // Optimization: Strict Columns, Limit 50
         const { data, error } = await supabase
             .from('orders')
             .select(`
@@ -501,12 +534,17 @@ export const closeQrModal = () => {
     setTimeout(() => els.qrModalOverlay.classList.add('hidden'), 300);
 };
 
-// 7. EcoPoints & Global Setup
+// --- 7. ECOPOINTS HISTORY PAGE ---
+
 export const renderEcoPointsPage = () => {
     const u = state.currentUser;
     if (!u) return;
+    
+    // Update balance
     const balanceEl = document.getElementById('ecopoints-balance');
     if(balanceEl) balanceEl.textContent = u.current_points;
+    
+    // Update Levels
     const currentLvl = getUserLevel(u.lifetime_points);
     const lvlTitle = document.getElementById('ecopoints-level-title');
     const lvlNum = document.getElementById('ecopoints-level-number');
@@ -518,6 +556,8 @@ export const renderEcoPointsPage = () => {
         lvlProg.style.width = `${currentLvl.progress}%`;
         lvlNext.textContent = currentLvl.progressText;
     }
+    
+    // Render Level List
     const levelsContainer = document.getElementById('all-levels-list');
     if (levelsContainer) {
         levelsContainer.innerHTML = state.levels.map((l, i) => {
@@ -535,6 +575,7 @@ export const renderEcoPointsPage = () => {
         }).join('');
     }
     
+    // Inject "How to Earn" card dynamically if missing
     let earnCard = document.getElementById('how-to-earn-card');
     if (!earnCard) {
         const recentActivityCard = document.getElementById('ecopoints-recent-activity')?.closest('.glass-card');
@@ -553,6 +594,7 @@ export const renderEcoPointsPage = () => {
         }
     }
 
+    // Render Recent History
     const historyContainer = document.getElementById('ecopoints-recent-activity');
     if (historyContainer) {
         const recentHistory = state.history.slice(0, 5); 
@@ -571,6 +613,7 @@ export const renderEcoPointsPage = () => {
     if(window.lucide) window.lucide.createIcons();
 };
 
+// --- GLOBAL BINDINGS ---
 window.renderRewardsWrapper = renderRewards;
 window.showProductDetailPage = showProductDetailPage;
 window.openPurchaseModal = openPurchaseModal;
