@@ -1,13 +1,34 @@
+/**
+ * EcoCampus - Dashboard Module (dashboard.js)
+ * Fully updated with Toast Notifications, AQI Logic, and Streak Management.
+ */
+
 import { supabase } from './supabase-client.js';
 import { state } from './state.js';
-import { els, formatDate, getIconForHistory, getPlaceholderImage, getTickImg, getUserInitials, getUserLevel, uploadToCloudinary, getTodayIST, logUserActivity, showToast } from './utils.js';
+import { 
+    els, 
+    formatDate, 
+    getIconForHistory, 
+    getPlaceholderImage, 
+    getTickImg, 
+    getUserInitials, 
+    getUserLevel, 
+    uploadToCloudinary, 
+    getTodayIST, 
+    logUserActivity, 
+    showToast 
+} from './utils.js';
 import { refreshUserData } from './app.js';
 import { loadLeaderboardData } from './social.js';
 
-// --- DASHBOARD CORE ---
+// --- DASHBOARD CORE DATA LOADING ---
 
+/**
+ * Loads essential user data for the dashboard: Check-in status, Streaks, and Impact stats.
+ * Uses strict column selection for performance.
+ */
 export const loadDashboardData = async () => {
-    // 1. One-Time Load Per Session
+    // Optimization: One-Time Load Per Session unless forced refresh
     if (state.dashboardLoaded) {
         renderDashboard();
         return;
@@ -17,17 +38,21 @@ export const loadDashboardData = async () => {
         const userId = state.currentUser.id;
         const todayIST = getTodayIST(); 
 
-        // 2. Strict Column Selection & 4. No Aggregation (Use Precomputed)
+        // Parallel fetching for speed
         const [
             { data: checkinData },
             { data: streakData },
             { data: impactData }
         ] = await Promise.all([
+            // 1. Check if checked in today
             supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', todayIST).limit(1),
+            // 2. Get current streak status
             supabase.from('user_streaks').select('current_streak, last_checkin_date').eq('user_id', userId).single(),
+            // 3. Get total impact stats
             supabase.from('user_impact').select('total_plastic_kg, co2_saved_kg, events_attended').eq('user_id', userId).maybeSingle()
         ]);
         
+        // Update Global State
         state.currentUser.isCheckedInToday = (checkinData && checkinData.length > 0);
         state.currentUser.checkInStreak = streakData ? streakData.current_streak : 0;
         state.currentUser.lastCheckInDate = streakData ? streakData.last_checkin_date : null; 
@@ -37,9 +62,13 @@ export const loadDashboardData = async () => {
 
     } catch (err) {
         console.error('Dashboard Data Error:', err);
+        showToast('Failed to load dashboard data.', 'error');
     }
 };
 
+/**
+ * Master render function for the Dashboard page.
+ */
 export const renderDashboard = () => {
     if (!state.currentUser) return; 
     renderDashboardUI();
@@ -47,12 +76,16 @@ export const renderDashboard = () => {
     initAQI(); 
 };
 
+// --- UI RENDERING HELPERS ---
+
 const renderDashboardUI = () => {
     const user = state.currentUser;
     
+    // Update Header Elements
     if(els.userPointsHeader) els.userPointsHeader.textContent = user.current_points;
     if(els.userNameGreeting) els.userNameGreeting.textContent = user.full_name;
     
+    // Update Sidebar Elements
     const sidebarName = document.getElementById('user-name-sidebar');
     const sidebarPoints = document.getElementById('user-points-sidebar');
     const sidebarLevel = document.getElementById('user-level-sidebar');
@@ -70,6 +103,7 @@ const renderDashboardUI = () => {
         sidebarAvatar.src = user.profile_img_url || getPlaceholderImage('80x80', getUserInitials(user.full_name));
     }
 
+    // Update Impact Cards
     const impactRecycled = document.getElementById('impact-recycled');
     const impactCo2 = document.getElementById('impact-co2');
     const impactEvents = document.getElementById('impact-events');
@@ -82,6 +116,7 @@ const renderDashboardUI = () => {
 const renderCheckinButtonState = () => {
     const streak = state.currentUser.checkInStreak || 0;
     
+    // Update Streak Counters (Pre/Post Animation)
     const preEl = document.getElementById('dashboard-streak-text-pre');
     const postEl = document.getElementById('dashboard-streak-text-post');
     if(preEl) preEl.textContent = streak;
@@ -90,6 +125,7 @@ const renderCheckinButtonState = () => {
     const btn = els.dailyCheckinBtn;
     if (!btn) return; 
 
+    // Toggle Button Style based on status
     if (state.currentUser.isCheckedInToday) {
         btn.classList.add('checkin-completed'); 
         btn.classList.remove('from-yellow-400', 'to-orange-400', 'dark:from-yellow-500', 'dark:to-orange-500', 'bg-gradient-to-r');
@@ -101,11 +137,13 @@ const renderCheckinButtonState = () => {
     }
 };
 
-// --- AQI LOGIC ---
+// --- AQI (AIR QUALITY INDEX) LOGIC ---
+
 const initAQI = () => {
     const card = document.getElementById('dashboard-aqi-card');
     if (!card) return;
 
+    // Only fetch if empty to avoid API spam
     if (card.innerHTML.trim() === "") {
         if (navigator.geolocation) {
             card.classList.remove('hidden');
@@ -132,9 +170,11 @@ const initAQI = () => {
 const fetchAQI = async (lat, lon) => {
     const card = document.getElementById('dashboard-aqi-card');
     try {
+        // Fetch AQI from Open-Meteo
         const aqiRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
         const aqiData = await aqiRes.json();
         
+        // Fetch City Name from BigDataCloud (Free Reverse Geocoding)
         const locRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
         const locData = await locRes.json();
         
@@ -190,7 +230,7 @@ const renderAQICard = (card, aqi, city) => {
     if(window.lucide) window.lucide.createIcons();
 };
 
-// --- HISTORY & PROFILE ---
+// --- HISTORY & PROFILE MODULES ---
 
 export const loadHistoryData = async () => {
     if (state.historyLoaded) {
@@ -245,6 +285,7 @@ export const renderProfile = () => {
     const u = state.currentUser;
     if (!u) return;
     
+    // Log profile view (Once per session)
     if (!sessionStorage.getItem('profile_view_logged')) {
         logUserActivity('view_profile', 'Viewed profile page');
         sessionStorage.setItem('profile_view_logged', '1');
@@ -298,21 +339,26 @@ export const setupFileUploads = () => {
             
             try {
                 showToast('Updating profile picture...', 'warning');
+                
+                // Upload to Cloudinary via Utils
                 const imageUrl = await uploadToCloudinary(file);
+                
+                // Update DB
                 const { error } = await supabase.from('users').update({ profile_img_url: imageUrl }).eq('id', state.currentUser.id);
                 if (error) throw error;
                 
+                // Update Local State & UI
                 state.currentUser.profile_img_url = imageUrl;
                 const sidebarAvatar = document.getElementById('user-avatar-sidebar');
                 if(sidebarAvatar) sidebarAvatar.src = imageUrl;
 
                 renderProfile();
                 renderDashboardUI(); 
-                showToast('Profile updated!', 'success');
+                showToast('Profile updated successfully!', 'success');
 
             } catch (err) {
                 console.error('Profile Upload Failed:', err);
-                showToast('Upload failed.', 'error');
+                showToast('Upload failed. Try a smaller image.', 'error');
                 avatarEl.src = originalSrc; 
             } finally {
                 avatarEl.style.opacity = '1';
@@ -327,6 +373,7 @@ export const setupFileUploads = () => {
 export const openCheckinModal = () => {
     if (state.currentUser.isCheckedInToday) return;
     
+    // Check if streak is actually broken
     let isStreakBroken = false;
     if (state.currentUser.lastCheckInDate) {
         const lastDate = new Date(state.currentUser.lastCheckInDate);
@@ -338,6 +385,7 @@ export const openCheckinModal = () => {
         const diffTime = Math.abs(today - lastDate);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         
+        // If more than 1 day difference (i.e., didn't check in yesterday)
         if (diffDays > 1) isStreakBroken = true;
     }
 
@@ -350,6 +398,7 @@ export const openCheckinModal = () => {
     const btnContainer = document.getElementById('checkin-modal-button-container');
 
     if (isStreakBroken && state.currentUser.checkInStreak > 0) {
+        // BROKEN STREAK UI
         streakDisplay.innerHTML = `<span class="text-red-500">Streak Lost!</span>`;
         calendarContainer.innerHTML = `
             <div class="text-center w-full mb-2">
@@ -370,6 +419,7 @@ export const openCheckinModal = () => {
         `;
     } 
     else {
+        // NORMAL CHECK-IN UI
         streakDisplay.textContent = `${state.currentUser.checkInStreak || 0} Days`;
         calendarContainer.innerHTML = '';
         const today = new Date(); 
@@ -409,15 +459,18 @@ export const handleRestoreStreak = async () => {
         const currentStreak = state.currentUser.checkInStreak;
         const todayIST = getTodayIST();
 
+        // 1. Deduct Points (Safe RPC call)
         const { error: pointsError } = await supabase.rpc('deduct_points', { 
             user_id_input: userId, 
             points_to_deduct: cost 
         }).maybeSingle();
 
         if (pointsError && pointsError.code !== 'PGRST202') { 
+             // Fallback if RPC fails or doesn't exist
              await supabase.from('users').update({ current_points: userPoints - cost }).eq('id', userId);
         }
 
+        // 2. Log Transaction
         await supabase.from('points_ledger').insert({
             user_id: userId,
             source_type: 'streak_restore',
@@ -425,12 +478,14 @@ export const handleRestoreStreak = async () => {
             description: 'Restored Streak'
         });
 
+        // 3. Insert Check-in
         await supabase.from('daily_checkins').insert({ 
             user_id: userId, 
             points_awarded: state.checkInReward,
             checkin_date: todayIST 
         });
 
+        // 4. Update Streak Table
         const restoredStreakCount = currentStreak + 1;
         const { error: streakError } = await supabase
             .from('user_streaks')
@@ -445,6 +500,7 @@ export const handleRestoreStreak = async () => {
         logUserActivity('streak_restored', `Restored streak to ${restoredStreakCount}`);
         closeCheckinModal();
 
+        // 5. Update Local State
         state.currentUser.checkInStreak = restoredStreakCount;
         state.currentUser.isCheckedInToday = true;
         state.currentUser.current_points -= cost; 
@@ -459,7 +515,7 @@ export const handleRestoreStreak = async () => {
 
     } catch (err) {
         console.error("Restore Streak Error:", err);
-        showToast("Failed to restore streak.", "error");
+        showToast("Failed to restore streak. Try again.", "error");
         if(btn) { btn.disabled = false; btn.innerHTML = 'Restore Streak (-50 Pts)'; }
     }
 };
@@ -479,6 +535,8 @@ export const handleDailyCheckin = async () => {
 
     try {
         const todayIST = getTodayIST();
+        
+        // 1. Insert Check-in
         const { error } = await supabase.from('daily_checkins').insert({ 
             user_id: state.currentUser.id, 
             points_awarded: state.checkInReward,
@@ -487,12 +545,14 @@ export const handleDailyCheckin = async () => {
         
         if (error) throw error;
         
+        // 2. Fetch new streak from Trigger (Database Trigger handles increment)
         const { data: newStreak } = await supabase.from('user_streaks').select('current_streak').eq('user_id', state.currentUser.id).single();
         const finalStreak = newStreak ? newStreak.current_streak : 1;
         
         logUserActivity('checkin_success', `Daily check-in completed.`);
         closeCheckinModal();
 
+        // 3. Update Local State
         state.currentUser.checkInStreak = finalStreak;
         state.currentUser.isCheckedInToday = true;
         state.currentUser.current_points += state.checkInReward; 
@@ -507,7 +567,7 @@ export const handleDailyCheckin = async () => {
     } catch (err) {
         console.error('Check-in error:', err.message);
         logUserActivity('checkin_error', err.message);
-        showToast("Check-in failed.", "error");
+        showToast("Check-in failed. Please try again.", "error");
         
         if(checkinButton) {
             checkinButton.disabled = false;
@@ -516,6 +576,7 @@ export const handleDailyCheckin = async () => {
     }
 };
 
+// --- GLOBAL EXPORTS ---
 window.openCheckinModal = openCheckinModal;
 window.closeCheckinModal = closeCheckinModal;
 window.handleDailyCheckin = handleDailyCheckin;
