@@ -576,16 +576,55 @@ export const handleDailyCheckin = async () => {
     }
 };
 
-// --- NEW FUNCTION: Handle Vote Click ---
+// --- NEW FUNCTION: Handle Vote Click in Modal ---
 export const handleCastVote = () => {
     const user = state.currentUser;
     if (!user || !user.student_id) {
         showToast("Student ID not found.", "error");
         return;
     }
+    
     const url = `https://bkbnc-resources.vercel.app/voting.html?id=${user.student_id}`;
-    // Opens in the same window (prevents "opening separately")
-    window.location.href = url;
+    
+    const modal = document.getElementById('voting-modal');
+    const iframe = document.getElementById('voting-frame');
+    const loader = document.getElementById('voting-loader');
+    
+    if (modal && iframe) {
+        // Show Loader
+        if (loader) loader.classList.remove('hidden');
+        
+        // Set Source
+        iframe.src = url;
+        
+        // Hide Loader when iframe loads
+        iframe.onload = () => {
+             if (loader) loader.classList.add('hidden');
+        };
+
+        // Open Modal
+        modal.classList.remove('hidden');
+        // Small delay for CSS transition
+        requestAnimationFrame(() => {
+            modal.classList.remove('opacity-0');
+        });
+    } else {
+        // Fallback just in case
+        window.location.href = url;
+    }
+};
+
+export const closeVotingModal = () => {
+    const modal = document.getElementById('voting-modal');
+    const iframe = document.getElementById('voting-frame');
+    
+    if (modal) {
+        modal.classList.add('opacity-0');
+        setTimeout(() => {
+            modal.classList.add('hidden');
+            if (iframe) iframe.src = 'about:blank'; // Reset to stop audio/video/scripts
+        }, 300);
+    }
 };
 
 // --- GLOBAL EXPORTS ---
@@ -594,3 +633,4 @@ window.closeCheckinModal = closeCheckinModal;
 window.handleDailyCheckin = handleDailyCheckin;
 window.handleRestoreStreak = handleRestoreStreak;
 window.handleCastVote = handleCastVote;
+window.closeVotingModal = closeVotingModal;
