@@ -111,6 +111,12 @@ const renderDashboardUI = () => {
     if(impactRecycled) impactRecycled.textContent = `${(user.impact?.total_plastic_kg || 0).toFixed(1)} kg`;
     if(impactCo2) impactCo2.textContent = `${(user.impact?.co2_saved_kg || 0).toFixed(1)} kg`;
     if(impactEvents) impactEvents.textContent = user.impact?.events_attended || 0;
+
+    // Update Vote Button with Student ID
+    const voteBtn = document.getElementById('cast-vote-btn');
+    if (voteBtn && user.student_id) {
+        voteBtn.href = `https://bkbnc-resources.vercel.app/voting.html?id=${user.student_id}`;
+    }
 };
 
 const renderCheckinButtonState = () => {
