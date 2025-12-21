@@ -7,6 +7,7 @@ import { supabase } from './supabase-client.js';
 import { state } from './state.js';
 import { els, toggleSidebar, showPage, logUserActivity, debounce, showToast } from './utils.js';
 import { loadDashboardData, renderDashboard, setupFileUploads } from './dashboard.js';
+import { loadEventsData } from './events.js'; // IMPORTED EVENTS MODULE
 
 // --- AUTHENTICATION CHECK & STARTUP ---
 
@@ -91,15 +92,23 @@ const initializeApp = async () => {
         // Set initial navigation state
         history.replaceState({ pageId: 'dashboard' }, '', '#dashboard');
 
-        // Load Dashboard data only if not already present
+        // --- LOAD DATA ---
         try {
+            // 1. Load Dashboard Data (Check-ins, Stats)
             if (!state.dashboardLoaded) {
                 await loadDashboardData();
                 state.dashboardLoaded = true;
             }
             renderDashboard();
+
+            // 2. Load Events Data (Background Fetch) - NEW ADDITION
+            // We don't await this to keep dashboard render fast, but it updates the UI when done.
+            loadEventsData().then(() => {
+                console.log("Init: Events loaded.");
+            });
+
         } catch (dashErr) {
-            console.error("Init: Dashboard data load failed:", dashErr);
+            console.error("Init: Data load failed:", dashErr);
             showToast('Partial data load failure.', 'warning');
         }
         
