@@ -1,15 +1,18 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
-    <title>EcoCampus - Green Initiative</title>
+    <title>EcoCampus - New Year 2026</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css"> 
     <script src="https://unpkg.com/lucide@latest"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
     <script>
         tailwind.config = {
@@ -48,10 +51,7 @@
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 font-inter h-[100dvh] overflow-hidden"> 
     
-    <div id="snow-container" class="snow-container">
-        <div class="snow-layer snow-layer-1"></div>
-        <div class="snow-layer snow-layer-2"></div>
-    </div>
+    <canvas id="confetti-canvas"></canvas>
 
     <script>
         (function() {
@@ -133,7 +133,14 @@
             <main class="main-content bg-gray-50 dark:bg-gray-900 flex-grow overflow-y-auto pb-24 lg:pb-8">
                 
                 <div id="dashboard" class="page active p-6">
-                    <div class="mb-8"><h2 class="text-3xl font-bold text-gray-900 dark:text-gray-100">Hi, <span id="user-name-greeting">...</span>!</h2><p class="text-lg text-gray-600 dark:text-gray-400">Let's make our campus greener today.</p></div>
+                    <div class="mb-6 flex justify-between items-end">
+                        <div>
+                            <h2 class="text-3xl font-bold text-gray-900 dark:text-gray-100">Hi, <span id="user-name-greeting">...</span>!</h2>
+                            <p class="text-lg text-gray-600 dark:text-gray-400">Let's make our campus greener today.</p>
+                        </div>
+                    </div>
+
+                    <div id="new-year-countdown-container" class="mb-8 hidden"></div>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
                         <div>
@@ -503,7 +510,7 @@
     </div>
 
     <button onclick="openChatbotModal()" id="chatbot-btn" class="fixed z-30 bottom-24 lg:bottom-10 right-6 w-16 h-16 hover:scale-105 transition-transform">
-        <div class="relative w-full h-full santa-hat-overlay">
+        <div class="relative w-full h-full">
             <img src="https://i.ibb.co/7xwsMnBc/Pngtree-green-earth-globe-clip-art-16672659-1.png" alt="EcoBot" class="w-full h-full object-contain drop-shadow-xl">
             <span class="absolute bottom-1 right-1 flex h-3 w-3">
                 <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
