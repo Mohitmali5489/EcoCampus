@@ -2,7 +2,7 @@ import { supabase } from './supabase-client.js';
 import { state } from './state.js';
 import { els, formatDate, getPlaceholderImage, getTickImg, logUserActivity, getOptimizedImageUrl, showToast } from './utils.js';
 
-// --- EVENTS MODULE ---
+// --- EVENTS MODULEs ---
 
 export const loadEventsData = async () => {
     try {
