@@ -6,15 +6,20 @@ import { els, formatDate, getPlaceholderImage, getTickImg, logUserActivity, getO
 
 export const loadEventsData = async () => {
     try {
-        // 1. Fetch Events (No Joins, Minimal Fields for bandwidth optimization)
+        // 1. Get current time in ISO format for filtering
+        const now = new Date().toISOString();
+
+        // 2. Fetch Events (Filter: start_at >= NOW)
+        // We filter out past events directly from the DB to save bandwidth
         const { data: events, error: eventsError } = await supabase
             .from('events')
             .select('id, title, start_at, location, poster_url, points_reward, organizer, description')
+            .gte('start_at', now) 
             .order('start_at', { ascending: true });
 
         if (eventsError) throw eventsError;
 
-        // 2. Fetch My Attendance ONLY (Privacy & Egress optimization)
+        // 3. Fetch My Attendance ONLY (Privacy & Egress optimization)
         const { data: myAttendance, error: attendanceError } = await supabase
             .from('event_attendance')
             .select('event_id, status')
@@ -28,6 +33,7 @@ export const loadEventsData = async () => {
             myAttendance.forEach(a => attendanceMap.set(a.event_id, a.status));
         }
 
+        // Map events to include the user's personal status
         state.events = events.map(e => {
             const status = attendanceMap.get(e.id);
             let myStatus = 'upcoming';
@@ -36,18 +42,15 @@ export const loadEventsData = async () => {
                 if (status === 'confirmed') myStatus = 'attended';
                 else if (status === 'absent') myStatus = 'missed';
                 else if (status === 'registered') myStatus = 'going';
-            } else {
-                // Check if past
-                if (new Date(e.start_at) < new Date()) myStatus = 'missed';
-            }
+            } 
             
             return { ...e, myStatus };
         });
         
-        // 3. UPDATE DASHBOARD UI WITH NEW DATA
+        // 4. UPDATE DASHBOARD UI WITH NEW DATA
         updateDashboardEvent();
 
-        // 4. Render Events Page if currently active
+        // 5. Render Events Page if currently active
         const eventsPage = document.getElementById('events');
         if (eventsPage && eventsPage.classList.contains('active')) {
             renderEventsPage();
@@ -68,6 +71,7 @@ const renderEventsPage = () => {
     }
 
     list.innerHTML = state.events.map(event => {
+        // Even with DB filter, logic to handle "just ended" states is good to keep
         const isPast = new Date(event.start_at) < new Date();
         const optimizedPoster = getOptimizedImageUrl(event.poster_url);
         
@@ -196,6 +200,7 @@ const updateDashboardEvent = () => {
     }
 };
 
+// Export to window for HTML access
 window.handleRSVP = handleRSVP;
 window.openParticipantsModal = openParticipantsModal;
 window.closeParticipantsModal = closeParticipantsModal;
