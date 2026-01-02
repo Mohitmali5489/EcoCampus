@@ -1,6 +1,6 @@
 /**
  * EcoCampus - Main Application Logic (app.js)
- * Final Version: Fixed New Year Celebration State, Static Background (No Float) & Core Logic
+ * Final Version: Standard Dashboard State (New Year Elements Removed)
  */
 
 import { supabase } from './supabase-client.js';
@@ -52,16 +52,7 @@ const initializeApp = async () => {
         console.log('Init: Fetching user profile...');
         
         // Console Art
-        console.log("%c🎉 Ready for 2026! EcoCampus Loaded. 🌿", "color: #fbbf24; font-size: 16px; font-weight: bold; background: #064e3b; padding: 5px; border-radius: 5px;");
-
-        // PERFORMANCE: Remove heavy DOM elements if in Low Data Mode
-        if (document.body.classList.contains('low-data-mode')) {
-            const confettiCanvas = document.getElementById('confetti-canvas');
-            if (confettiCanvas) {
-                confettiCanvas.remove();
-                console.log("🚀 Low Data Mode: Animations disabled.");
-            }
-        }
+        console.log("%c🌿 EcoCampus Loaded.", "color: #fbbf24; font-size: 16px; font-weight: bold; background: #064e3b; padding: 5px; border-radius: 5px;");
 
         // Fetch specific columns to optimize bandwidth
         const { data: userProfile, error } = await supabase
@@ -90,12 +81,7 @@ const initializeApp = async () => {
             logUserActivity('login', 'User logged in');
             sessionStorage.setItem('login_logged', '1');
             
-            // Check Date for Festive Greeting (Jan 1 - Jan 5)
-            const today = new Date();
-            const isNewYearWeek = today.getMonth() === 0 && today.getDate() <= 5; 
-            const greetingMsg = isNewYearWeek ? `Happy New Year, ${userProfile.full_name}! 🎆` : `Welcome back, ${userProfile.full_name}!`;
-            
-            showToast(greetingMsg, 'success');
+            showToast(`Welcome back, ${userProfile.full_name}!`, 'success');
         }
 
         // Set initial navigation state
@@ -110,10 +96,7 @@ const initializeApp = async () => {
             }
             renderDashboard();
 
-            // 2. Initialize New Year Hero Banner
-            initNewYearCountdown();
-
-            // 3. Load Events Data (Background Fetch)
+            // 2. Load Events Data (Background Fetch)
             loadEventsData().then(() => {
                 console.log("Init: Events loaded.");
             });
@@ -203,172 +186,6 @@ export const refreshUserData = async () => {
     } catch (err) { 
         console.error('RefreshData: Unexpected error:', err); 
     }
-};
-
-// --- NEW YEAR 2026 HERO BANNER LOGIC ---
-
-let countdownInterval;
-
-const initNewYearCountdown = () => {
-    const container = document.getElementById('new-year-countdown-container');
-    if (!container) return;
-
-    container.classList.remove('hidden');
-    
-    // TARGET: Jan 1, 2026 00:00:00
-    const targetDate = new Date('January 1, 2026 00:00:00').getTime();
-
-    // Clear existing interval if re-initializing
-    if (countdownInterval) clearInterval(countdownInterval);
-
-    // DYNAMIC GREETING UPDATE (Optional)
-    const greetingEl = document.getElementById('user-name-greeting');
-    if (greetingEl) {
-        const now = new Date();
-        if (now.getFullYear() === 2026 && now.getMonth() === 0 && now.getDate() <= 5) {
-             const parent = greetingEl.parentElement; 
-             if(parent) parent.innerHTML = `Happy New Year, <span class="text-brand-600">${state.currentUser.full_name}</span>!`;
-        }
-    }
-
-    const updateTimer = () => {
-        const now = new Date().getTime();
-        const distance = targetDate - now;
-
-        // --- FIXED STATE CHECK: IS IT 2026? ---
-        if (distance < 0) {
-            // Stop the countdown loop immediately
-            clearInterval(countdownInterval);
-            
-            // Render the Fixed Celebration Banner
-            renderHappyNewYear(container);
-            
-            // Auto-launch confetti only if the transition just happened (within last 10s)
-            // This prevents confetti spam on page refresh unless it's THE moment.
-            if (distance > -10000) {
-                launchConfetti();
-            }
-            return;
-        }
-
-        // --- CALCULATE TIME ---
-        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-        // --- RENDER HOLOGRAPHIC COUNTDOWN ---
-        container.innerHTML = `
-            <div class="glass-hero p-6 relative w-full mb-6 group cursor-pointer overflow-hidden transition-all duration-500 hover:scale-[1.01]" onclick="launchConfetti()">
-                
-                <div class="hero-particle w-24 h-24 top-[-20px] right-[-20px] bg-purple-500/20 blur-xl"></div>
-                <div class="hero-particle w-12 h-12 bottom-[10px] left-[10px] bg-blue-400/20 blur-lg delay-700"></div>
-                
-                <div class="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-                    
-                    <div class="text-center md:text-left">
-                        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/20 backdrop-blur-md mb-3 shadow-inner">
-                            <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse box-shadow-green"></span>
-                            <span class="text-[10px] font-bold text-gray-100 uppercase tracking-widest">Live Countdown</span>
-                        </div>
-                        <h2 class="text-3xl md:text-4xl font-bold text-white mb-1 tracking-tight">
-                            Time until <span class="text-shimmer font-black">2026</span>
-                        </h2>
-                        <p class="text-sm text-gray-300 font-medium">Let's make this year greener together.</p>
-                    </div>
-
-                    <div class="grid grid-cols-4 gap-2 md:gap-4">
-                        ${renderHeroTimeBox(days, 'DAYS')}
-                        ${renderHeroTimeBox(hours, 'HRS')}
-                        ${renderHeroTimeBox(minutes, 'MINS')}
-                        ${renderHeroTimeBox(seconds, 'SECS', true)}
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        if(window.lucide) window.lucide.createIcons();
-    };
-
-    // Run once immediately to avoid 1s delay
-    updateTimer(); 
-    
-    // Start interval only if in future
-    const now = new Date().getTime();
-    if (targetDate - now > 0) {
-        countdownInterval = setInterval(updateTimer, 1000);
-    }
-};
-
-const renderHeroTimeBox = (value, label, isAccent = false) => `
-    <div class="flex flex-col items-center justify-center p-3 hero-timer-box min-w-[65px] md:min-w-[75px]">
-        <span class="text-2xl md:text-3xl font-black ${isAccent ? 'text-blue-300' : 'text-white'} tabular-nums font-mono leading-none mb-1">
-            ${String(value).padStart(2, '0')}
-        </span>
-        <span class="text-[9px] font-bold text-gray-400 uppercase tracking-wider">${label}</span>
-    </div>
-`;
-
-// --- FIXED POSITION CELEBRATION CARD (CLEAN & STATIC) ---
-const renderHappyNewYear = (container) => {
-    container.innerHTML = `
-        <div class="glass-hero new-year-fixed min-h-[200px] p-6 
-                    flex flex-col items-center justify-center 
-                    text-center relative overflow-hidden mb-6"
-             onclick="launchConfetti()">
-
-            <div class="absolute inset-0 bg-gradient-to-r 
-                        from-blue-600/20 via-purple-600/20 to-blue-600/20"></div>
-            
-            <h1 class="text-3xl sm:text-4xl md:text-6xl font-black text-shimmer mb-3 relative z-10">
-                HAPPY NEW YEAR!
-            </h1>
-
-            <p class="text-base md:text-lg font-medium text-gray-200 relative z-10 mb-6">
-                Welcome to a greener future. 🌿✨
-            </p>
-
-            <button onclick="launchConfetti(event)"
-                class="relative z-20 px-8 py-3 bg-white text-indigo-900 
-                       font-bold rounded-full text-sm shadow-lg active:scale-95">
-                Celebrate Again 🎉
-            </button>
-        </div>
-    `;
-};
-
-// Global Confetti Trigger
-window.launchConfetti = (e) => {
-    if(e) e.stopPropagation();
-    // Safety check if confetti lib failed to load
-    if (!window.confetti) return;
-
-    const duration = 3000;
-    const end = Date.now() + duration;
-
-    // Theme Colors: Blue, Purple, White, Gold
-    const colors = ['#60a5fa', '#a78bfa', '#ffffff', '#fbbf24'];
-
-    (function frame() {
-        confetti({
-            particleCount: 3,
-            angle: 60,
-            spread: 55,
-            origin: { x: 0 },
-            colors: colors
-        });
-        confetti({
-            particleCount: 3,
-            angle: 120,
-            spread: 55,
-            origin: { x: 1 },
-            colors: colors
-        });
-
-        if (Date.now() < end) {
-            requestAnimationFrame(frame);
-        }
-    }());
 };
 
 // --- EVENT LISTENERS & UI LOGIC ---
