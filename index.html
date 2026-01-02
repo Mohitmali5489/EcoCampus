@@ -1,18 +1,15 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
-    <title>EcoCampus - New Year 2026</title>
+    <title>EcoCampus</title>
     
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css"> 
     <script src="https://unpkg.com/lucide@latest"></script>
-
-    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 
     <script>
         tailwind.config = {
@@ -51,8 +48,6 @@
 </head>
 <body class="bg-gray-50 dark:bg-gray-900 font-inter h-[100dvh] overflow-hidden"> 
     
-    <canvas id="confetti-canvas"></canvas>
-
     <script>
         (function() {
             const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
@@ -139,8 +134,6 @@
                             <p class="text-lg text-gray-600 dark:text-gray-400">Let's make our campus greener today.</p>
                         </div>
                     </div>
-
-                    <div id="new-year-countdown-container" class="mb-8 hidden"></div>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
                         <div>
