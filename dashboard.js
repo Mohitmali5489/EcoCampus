@@ -1,6 +1,7 @@
 /**
  * EcoCampus - Dashboard Module (dashboard.js)
  * Fully updated with Toast Notifications, AQI Logic, and Streak Management.
+ * Update: Removed Streak Restore Feature.
  */
 
 import { supabase } from './supabase-client.js';
@@ -370,12 +371,12 @@ export const setupFileUploads = () => {
     }
 };
 
-// --- STREAK RESTORE & CHECK-IN LOGIC ---
+// --- CHECK-IN LOGIC (RESTORE REMOVED) ---
 
 export const openCheckinModal = () => {
     if (state.currentUser.isCheckedInToday) return;
     
-    // Check if streak is actually broken
+    // Check if streak is broken to display "0 Days"
     let isStreakBroken = false;
     if (state.currentUser.lastCheckInDate) {
         const lastDate = new Date(state.currentUser.lastCheckInDate);
@@ -387,7 +388,6 @@ export const openCheckinModal = () => {
         const diffTime = Math.abs(today - lastDate);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         
-        // If more than 1 day difference (i.e., didn't check in yesterday)
         if (diffDays > 1) isStreakBroken = true;
     }
 
@@ -399,127 +399,28 @@ export const openCheckinModal = () => {
     const streakDisplay = document.getElementById('checkin-modal-streak');
     const btnContainer = document.getElementById('checkin-modal-button-container');
 
-    if (isStreakBroken && state.currentUser.checkInStreak > 0) {
-        // BROKEN STREAK UI
-        streakDisplay.innerHTML = `<span class="text-red-500">Streak Lost!</span>`;
-        calendarContainer.innerHTML = `
-            <div class="text-center w-full mb-2">
-                <i data-lucide="flame-off" class="w-16 h-16 text-gray-300 dark:text-gray-600 mx-auto mb-3"></i>
-                <p class="text-gray-600 dark:text-gray-300 text-sm">You missed a day! Your ${state.currentUser.checkInStreak}-day streak is at risk.</p>
+    // Logic: Always show standard check-in. If broken, visual streak is 0.
+    const displayStreak = isStreakBroken ? 0 : (state.currentUser.checkInStreak || 0);
+
+    streakDisplay.textContent = `${displayStreak} Days`;
+    calendarContainer.innerHTML = '';
+    const today = new Date(); 
+    for (let i = -3; i <= 3; i++) {
+        const d = new Date(today);
+        d.setDate(today.getDate() + i);
+        const isToday = i === 0;
+        calendarContainer.innerHTML += `
+            <div class="flex flex-col items-center text-xs ${isToday ? 'font-bold text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}">
+                <span class="mb-1">${['S','M','T','W','T','F','S'][d.getDay()]}</span>
+                <span class="w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-yellow-100 dark:bg-yellow-900' : ''}">${d.getDate()}</span>
             </div>`;
-        
-        btnContainer.innerHTML = `
-            <div class="flex flex-col gap-3 w-full">
-                <button onclick="handleRestoreStreak()" class="w-full bg-gradient-to-r from-yellow-400 to-orange-500 text-white font-bold py-3 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 hover:scale-[1.02] transition-transform">
-                    <i data-lucide="zap" class="w-5 h-5 fill-current"></i>
-                    <span>Restore Streak (-50 Pts)</span>
-                </button>
-                <button onclick="handleDailyCheckin()" class="w-full bg-gray-200 dark:bg-gray-700 text-gray-500 dark:text-gray-400 font-bold py-3 px-4 rounded-xl hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors">
-                    Start Over (0 Days)
-                </button>
-            </div>
-        `;
-    } 
-    else {
-        // NORMAL CHECK-IN UI
-        streakDisplay.textContent = `${state.currentUser.checkInStreak || 0} Days`;
-        calendarContainer.innerHTML = '';
-        const today = new Date(); 
-        for (let i = -3; i <= 3; i++) {
-            const d = new Date(today);
-            d.setDate(today.getDate() + i);
-            const isToday = i === 0;
-            calendarContainer.innerHTML += `
-                <div class="flex flex-col items-center text-xs ${isToday ? 'font-bold text-yellow-600 dark:text-yellow-400' : 'text-gray-500 dark:text-gray-400'}">
-                    <span class="mb-1">${['S','M','T','W','T','F','S'][d.getDay()]}</span>
-                    <span class="w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-yellow-100 dark:bg-yellow-900' : ''}">${d.getDate()}</span>
-                </div>`;
-        }
-        btnContainer.innerHTML = `
-            <button onclick="handleDailyCheckin()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 shadow-lg transition-transform active:scale-95">
-                Check-in &amp; Earn ${state.checkInReward} Points
-            </button>`;
     }
+    btnContainer.innerHTML = `
+        <button onclick="handleDailyCheckin()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 shadow-lg transition-transform active:scale-95">
+            Check-in &amp; Earn ${state.checkInReward} Points
+        </button>`;
     
     if(window.lucide) window.lucide.createIcons();
-};
-
-export const handleRestoreStreak = async () => {
-    const cost = 50;
-    const userPoints = state.currentUser.current_points;
-
-    if (userPoints < cost) {
-        showToast(`Insufficient EcoPoints! You need ${cost} pts.`, 'warning');
-        return;
-    }
-
-    const btn = document.querySelector('#checkin-modal-button-container button');
-    if(btn) { btn.disabled = true; btn.innerHTML = 'Restoring...'; }
-
-    try {
-        const userId = state.currentUser.id;
-        const currentStreak = state.currentUser.checkInStreak;
-        const todayIST = getTodayIST();
-
-        // 1. Deduct Points (Safe RPC call)
-        const { error: pointsError } = await supabase.rpc('deduct_points', { 
-            user_id_input: userId, 
-            points_to_deduct: cost 
-        }).maybeSingle();
-
-        if (pointsError && pointsError.code !== 'PGRST202') { 
-             // Fallback if RPC fails or doesn't exist
-             await supabase.from('users').update({ current_points: userPoints - cost }).eq('id', userId);
-        }
-
-        // 2. Log Transaction
-        await supabase.from('points_ledger').insert({
-            user_id: userId,
-            source_type: 'streak_restore',
-            points_delta: -cost,
-            description: 'Restored Streak'
-        });
-
-        // 3. Insert Check-in
-        await supabase.from('daily_checkins').insert({ 
-            user_id: userId, 
-            points_awarded: state.checkInReward,
-            checkin_date: todayIST 
-        });
-
-        // 4. Update Streak Table
-        const restoredStreakCount = currentStreak + 1;
-        const { error: streakError } = await supabase
-            .from('user_streaks')
-            .update({ 
-                current_streak: restoredStreakCount,
-                last_checkin_date: todayIST 
-            })
-            .eq('user_id', userId);
-
-        if (streakError) throw streakError;
-
-        logUserActivity('streak_restored', `Restored streak to ${restoredStreakCount}`);
-        closeCheckinModal();
-
-        // 5. Update Local State
-        state.currentUser.checkInStreak = restoredStreakCount;
-        state.currentUser.isCheckedInToday = true;
-        state.currentUser.current_points -= cost; 
-        
-        renderCheckinButtonState();
-        renderDashboardUI();
-        await refreshUserData();
-        
-        if (state.leaderboardLoaded) await loadLeaderboardData();
-
-        showToast("Streak Restored! 🔥", "success");
-
-    } catch (err) {
-        console.error("Restore Streak Error:", err);
-        showToast("Failed to restore streak. Try again.", "error");
-        if(btn) { btn.disabled = false; btn.innerHTML = 'Restore Streak (-50 Pts)'; }
-    }
 };
 
 export const closeCheckinModal = () => {
@@ -547,7 +448,7 @@ export const handleDailyCheckin = async () => {
         
         if (error) throw error;
         
-        // 2. Fetch new streak from Trigger (Database Trigger handles increment)
+        // 2. Fetch new streak from Trigger (Database Trigger handles increment or reset)
         const { data: newStreak } = await supabase.from('user_streaks').select('current_streak').eq('user_id', state.currentUser.id).single();
         const finalStreak = newStreak ? newStreak.current_streak : 1;
         
@@ -582,4 +483,3 @@ export const handleDailyCheckin = async () => {
 window.openCheckinModal = openCheckinModal;
 window.closeCheckinModal = closeCheckinModal;
 window.handleDailyCheckin = handleDailyCheckin;
-window.handleRestoreStreak = handleRestoreStreak;
