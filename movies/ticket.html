@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Event Ticket</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+
+    <style>
+        /* =====================================================
+           TICKET SPECIFIC STYLES
+           (Uses global variables from style.css for theme)
+        ===================================================== */
+        body {
+            background-color: var(--bg-app);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+        }
+
+        /* TICKET CONTAINER */
+        .ticket-container {
+            width: 100%;
+            max-width: 380px;
+            filter: drop-shadow(0 20px 40px rgba(0,0,0,0.1));
+        }
+
+        /* TOP SECTION (Main Info) */
+        .ticket-top {
+            background: var(--bg-surface);
+            border-top-left-radius: 24px;
+            border-top-right-radius: 24px;
+            padding: 30px 24px 24px;
+            position: relative;
+        }
+
+        /* BOTTOM SECTION (QR Stub) */
+        .ticket-bottom {
+            background: var(--bg-surface);
+            border-bottom-left-radius: 24px;
+            border-bottom-right-radius: 24px;
+            padding: 24px;
+            text-align: center;
+            position: relative;
+        }
+
+        /* THE CUT-OUT DIVIDER EFFECT */
+        .ticket-divider {
+            position: relative;
+            height: 40px;
+            background: var(--bg-surface);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+        }
+
+        .ticket-divider::before,
+        .ticket-divider::after {
+            content: '';
+            position: absolute;
+            width: 32px;
+            height: 32px;
+            background-color: var(--bg-app); /* Matches body bg to create cut-out */
+            border-radius: 50%;
+            top: 50%;
+            transform: translateY(-50%);
+            box-shadow: inset 0 0 0 0 rgba(0,0,0,0.05); /* Optional inner shadow */
+        }
+
+        .ticket-divider::before { left: -18px; }
+        .ticket-divider::after { right: -18px; }
+
+        .dashed-line {
+            width: 100%;
+            margin: 0 24px;
+            border-top: 2px dashed var(--border);
+            opacity: 0.6;
+        }
+
+        /* HEADER ELEMENTS */
+        .app-logo {
+            width: 50px;
+            height: 50px;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto 12px;
+        }
+
+        .collab-text {
+            text-align: center;
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            letter-spacing: 0.8px;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+        }
+
+        .partner-badge {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            background: var(--bg-app);
+            border: 1px solid var(--border);
+            padding: 6px 16px;
+            border-radius: 99px;
+            width: fit-content;
+            margin: 0 auto 30px;
+        }
+
+        .partner-badge img {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+        }
+
+        .partner-badge span {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        /* MOVIE INFO */
+        .movie-row {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 24px;
+            align-items: flex-start;
+        }
+
+        .movie-poster {
+            width: 90px;
+            aspect-ratio: 2/3;
+            border-radius: 12px;
+            object-fit: cover;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        .movie-details h1 {
+            font-size: 20px;
+            font-weight: 800;
+            line-height: 1.2;
+            margin: 4px 0 8px;
+            color: var(--text-primary);
+        }
+
+        .tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .tag {
+            font-size: 10px;
+            font-weight: 600;
+            background: var(--bg-app);
+            color: var(--text-secondary);
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        /* INFO GRID BOX */
+        .info-box {
+            background: var(--bg-app);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .info-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .info-value {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        .info-value.seat {
+            color: var(--accent);
+            font-size: 16px;
+        }
+
+        /* FOOTER STUB */
+        .screen-pill {
+            display: inline-block;
+            background: var(--bg-app);
+            border: 1px solid var(--border);
+            padding: 6px 14px;
+            border-radius: 99px;
+            font-size: 10px;
+            font-weight: 800;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .qr-wrapper {
+            background: white; /* QR needs white bg even in dark mode */
+            padding: 10px;
+            border-radius: 12px;
+            display: inline-block;
+            margin-bottom: 12px;
+        }
+
+        .ticket-id {
+            font-size: 11px;
+            font-family: monospace;
+            color: var(--text-secondary);
+            letter-spacing: 1px;
+        }
+
+        /* LOADING STATE */
+        .skeleton {
+            background: #e2e8f0;
+            border-radius: 4px;
+            animation: pulse 1.5s infinite;
+        }
+        [data-theme="dark"] .skeleton { background: #334155; }
+        
+        @keyframes pulse {
+            0% { opacity: 0.6; }
+            50% { opacity: 1; }
+            100% { opacity: 0.6; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ticket-container" id="ticketWrapper">
+        <div class="ticket-top">
+            <img src="https://i.ibb.co/67MXS1wX/1763474740707.png" class="app-logo" alt="EcoCampus">
+            
+            <div class="collab-text">IN COLLABORATION WITH</div>
+            
+            <div class="partner-badge">
+                <img id="partnerLogo" src="https://placehold.co/20" alt="Partner">
+                <span id="partnerName">Student Council</span>
+            </div>
+
+            <div class="movie-row">
+                <img id="poster" class="movie-poster" src="" style="display:none">
+                <div id="posterSkeleton" class="movie-poster skeleton"></div>
+                
+                <div class="movie-details">
+                    <h1 id="title">Loading...</h1>
+                    <div class="tags" id="tagsContainer">
+                        <span class="skeleton" style="width:40px;height:20px;display:inline-block"></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <div class="info-item">
+                    <div class="info-label">DATE</div>
+                    <div class="info-value" id="date">--</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">TIME</div>
+                    <div class="info-value" id="time">--</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">SEAT</div>
+                    <div class="info-value seat" id="seat">--</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">VENUE</div>
+                    <div class="info-value" id="venue">--</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="ticket-divider">
+            <div class="dashed-line"></div>
+        </div>
+
+        <div class="ticket-bottom">
+            <div class="screen-pill" id="screen">SCREEN 1 • IT BUILDING</div>
+            
+            <div>
+                <div class="qr-wrapper">
+                    <div id="qr"></div>
+                </div>
+            </div>
+            
+            <div class="ticket-id" id="ticketId">ID: LOADING...</div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { supabase } from '../supabase-client.js';
+
+        // --- THEME SYNC ---
+        function applyTheme() {
+            const savedTheme = localStorage.getItem('eco-theme');
+            const isDark = savedTheme === 'dark' || (!savedTheme && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            
+            if (isDark) {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            } else {
+                document.documentElement.removeAttribute('data-theme');
+            }
+        }
+        applyTheme();
+
+        // --- DATA FETCHING ---
+        const id = new URLSearchParams(location.search).get('id');
+
+        async function init() {
+            // 1. Auth Check
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user) {
+                location.href = '../login.html';
+                return;
+            }
+
+            // 2. Fetch User Profile
+            const { data: profile } = await supabase
+                .from('users')
+                .select('id')
+                .eq('auth_user_id', user.id)
+                .single();
+
+            if (!profile) return;
+
+            // 3. Fetch Booking
+            const { data, error } = await supabase
+                .from('bookings')
+                .select(`
+                    id, seat_number, qr_code,
+                    screenings (
+                        show_time, venue, partner_name, partner_logo,
+                        movies ( title, poster_url, genre, language )
+                    )
+                `)
+                .eq('id', id)
+                .eq('user_id', profile.id)
+                .single();
+
+            if (error || !data) {
+                document.body.innerHTML = `<p style="text-align:center; color: var(--text-secondary);">Ticket not found.</p>`;
+                return;
+            }
+
+            // 4. Populate UI
+            const d = new Date(data.screenings.show_time);
+            
+            // Partner
+            const pName = document.getElementById('partnerName');
+            const pLogo = document.getElementById('partnerLogo');
+            pName.textContent = data.screenings.partner_name || 'Student Council';
+            if (data.screenings.partner_logo) pLogo.src = data.screenings.partner_logo;
+
+            // Movie Info
+            document.getElementById('title').textContent = data.screenings.movies.title;
+            
+            // Handle Poster Loading
+            const poster = document.getElementById('poster');
+            const skeleton = document.getElementById('posterSkeleton');
+            poster.src = data.screenings.movies.poster_url;
+            poster.onload = () => {
+                poster.style.display = 'block';
+                skeleton.style.display = 'none';
+            };
+
+            // Tags (Language, Genre, 2D/3D)
+            const tagsContainer = document.getElementById('tagsContainer');
+            tagsContainer.innerHTML = '';
+            
+            const tags = [];
+            if (data.screenings.movies.language) tags.push(data.screenings.movies.language);
+            if (data.screenings.movies.genre) tags.push(data.screenings.movies.genre);
+            tags.push('2D'); // Default tag
+
+            tags.forEach(tag => {
+                const span = document.createElement('span');
+                span.className = 'tag';
+                span.textContent = tag;
+                tagsContainer.appendChild(span);
+            });
+
+            // Grid Info
+            document.getElementById('date').textContent = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+            document.getElementById('time').textContent = d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+            document.getElementById('seat').textContent = data.seat_number;
+            document.getElementById('venue').textContent = data.screenings.venue || 'Seminar Hall';
+
+            // Footer
+            document.getElementById('ticketId').textContent = `ID: ${data.id.split('-')[0].toUpperCase()}-${data.seat_number}`;
+
+            // Generate QR
+            document.getElementById('qr').innerHTML = ''; // clear previous
+            new QRCode(document.getElementById('qr'), {
+                text: data.qr_code,
+                width: 140,
+                height: 140,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+        }
+
+        init();
+    </script>
+</body>
+</html>
