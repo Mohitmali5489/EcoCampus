@@ -1,7 +1,7 @@
 /**
  * EcoCampus - Dashboard Module (dashboard.js)
  * Fully updated with Toast Notifications, AQI Logic, and Streak Management.
- * Update: Removed Streak Restore Feature.
+ * Update: Added Streak Restore Feature (SQL Integrated).
  */
 
 import { supabase } from './supabase-client.js';
@@ -371,13 +371,15 @@ export const setupFileUploads = () => {
     }
 };
 
-// --- CHECK-IN LOGIC (RESTORE REMOVED) ---
+// --- CHECK-IN & STREAK LOGIC ---
 
 export const openCheckinModal = () => {
     if (state.currentUser.isCheckedInToday) return;
     
-    // Check if streak is broken to display "0 Days"
+    // Check if streak is broken to display correct UI
     let isStreakBroken = false;
+    let savedStreak = 0;
+
     if (state.currentUser.lastCheckInDate) {
         const lastDate = new Date(state.currentUser.lastCheckInDate);
         const today = new Date(); 
@@ -388,7 +390,10 @@ export const openCheckinModal = () => {
         const diffTime = Math.abs(today - lastDate);
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
         
-        if (diffDays > 1) isStreakBroken = true;
+        if (diffDays > 1) {
+            isStreakBroken = true;
+            savedStreak = state.currentUser.checkInStreak;
+        }
     }
 
     const checkinModal = document.getElementById('checkin-modal');
@@ -399,10 +404,14 @@ export const openCheckinModal = () => {
     const streakDisplay = document.getElementById('checkin-modal-streak');
     const btnContainer = document.getElementById('checkin-modal-button-container');
 
-    // Logic: Always show standard check-in. If broken, visual streak is 0.
+    // Display Logic
     const displayStreak = isStreakBroken ? 0 : (state.currentUser.checkInStreak || 0);
 
-    streakDisplay.textContent = `${displayStreak} Days`;
+    streakDisplay.innerHTML = isStreakBroken 
+        ? `<span class="text-red-500 line-through opacity-50 text-2xl mr-2">${savedStreak}</span> 0 Days`
+        : `${displayStreak} Days`;
+    
+    // Calendar Rendering
     calendarContainer.innerHTML = '';
     const today = new Date(); 
     for (let i = -3; i <= 3; i++) {
@@ -415,10 +424,44 @@ export const openCheckinModal = () => {
                 <span class="w-8 h-8 flex items-center justify-center rounded-full ${isToday ? 'bg-yellow-100 dark:bg-yellow-900' : ''}">${d.getDate()}</span>
             </div>`;
     }
-    btnContainer.innerHTML = `
-        <button onclick="handleDailyCheckin()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 shadow-lg transition-transform active:scale-95">
-            Check-in &amp; Earn ${state.checkInReward} Points
-        </button>`;
+
+    // Button Logic: Standard Check-in OR Restore Option
+    let buttonsHTML = '';
+
+    if (isStreakBroken) {
+        const canRestore = state.currentUser.current_points >= 50;
+        
+        // Restore Button
+        if (canRestore) {
+            buttonsHTML += `
+                <button onclick="handleStreakRestore()" class="w-full mb-3 bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-3 px-4 rounded-xl shadow-lg hover:shadow-purple-500/30 transition-all active:scale-95 flex items-center justify-center gap-2">
+                    <i data-lucide="zap" class="w-4 h-4 fill-yellow-400 text-yellow-400"></i>
+                    Restore ${savedStreak} Day Streak (-50 Pts)
+                </button>
+            `;
+        } else {
+             buttonsHTML += `
+                <div class="w-full mb-3 p-3 bg-gray-100 dark:bg-gray-800 rounded-xl text-center border border-gray-200 dark:border-gray-700">
+                    <p class="text-xs text-gray-500">Need 50 Pts to restore ${savedStreak} day streak.</p>
+                </div>
+            `;
+        }
+
+        // Start New Streak Button
+        buttonsHTML += `
+            <button onclick="handleDailyCheckin()" class="w-full bg-white dark:bg-gray-800 border-2 border-green-500 text-green-600 dark:text-green-400 font-bold py-3 px-4 rounded-xl hover:bg-green-50 dark:hover:bg-gray-700 transition-transform active:scale-95">
+                Start New Streak (+${state.checkInReward} Pts)
+            </button>`;
+            
+    } else {
+        // Standard Check-in
+        buttonsHTML = `
+            <button onclick="handleDailyCheckin()" class="w-full bg-green-600 text-white font-bold py-3 px-4 rounded-xl hover:bg-green-700 shadow-lg transition-transform active:scale-95">
+                Check-in &amp; Earn ${state.checkInReward} Points
+            </button>`;
+    }
+
+    btnContainer.innerHTML = buttonsHTML;
     
     if(window.lucide) window.lucide.createIcons();
 };
@@ -427,6 +470,42 @@ export const closeCheckinModal = () => {
     const checkinModal = document.getElementById('checkin-modal');
     checkinModal.classList.remove('open');
     checkinModal.classList.add('invisible', 'opacity-0');
+};
+
+export const handleStreakRestore = async () => {
+    const btnContainer = document.getElementById('checkin-modal-button-container');
+    const originalContent = btnContainer.innerHTML;
+    btnContainer.innerHTML = '<button disabled class="w-full bg-gray-300 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-bold py-3 px-4 rounded-xl animate-pulse cursor-wait">Restoring Streak...</button>';
+
+    try {
+        const { data, error } = await supabase.rpc('restore_streak_v1');
+
+        if (error) throw error;
+        if (!data.success) throw new Error(data.error);
+
+        logUserActivity('streak_restore', 'Restored streak with points');
+        
+        // Update Local State
+        state.currentUser.checkInStreak = data.restored_streak; 
+        state.currentUser.current_points -= 50;
+        state.currentUser.lastCheckInDate = getTodayIST(); // Restore sets checkin date to today
+        
+        // We do NOT set isCheckedInToday = true here, because the restore fee is separate from the daily check-in.
+        // User must click "Check-in" again to actually log today's attendance and get +10 points.
+        
+        showToast("Streak Restored! 🔥", "success");
+        
+        // Re-open modal to show the standard check-in button immediately
+        openCheckinModal();
+        
+        renderDashboardUI();
+        await refreshUserData();
+
+    } catch (err) {
+        console.error("Streak Restore Error:", err);
+        showToast(err.message || "Failed to restore streak.", "error");
+        btnContainer.innerHTML = originalContent; // Revert buttons on failure
+    }
 };
 
 export const handleDailyCheckin = async () => {
@@ -483,3 +562,4 @@ export const handleDailyCheckin = async () => {
 window.openCheckinModal = openCheckinModal;
 window.closeCheckinModal = closeCheckinModal;
 window.handleDailyCheckin = handleDailyCheckin;
+window.handleStreakRestore = handleStreakRestore;
