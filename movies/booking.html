@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Select Seat</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body style="overflow: hidden;">
+
+    <header class="header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <a href="index.html" style="color: inherit;"><i data-lucide="arrow-left"></i></a>
+            <div>
+                <div style="font-weight: 700; line-height: 1.1;" id="movieTitle">Loading...</div>
+                <div style="font-size: 11px; color: var(--text-secondary);" id="movieTime">...</div>
+            </div>
+        </div>
+        <div class="user-points"><span id="userBal">...</span> Pts</div>
+    </header>
+
+    <div id="viewport" style="width: 100%; height: calc(100vh - 140px); overflow: hidden; position: relative; touch-action: none;">
+        <div id="stage" style="position: absolute; transform-origin: top center; width: 100%; padding-top: 20px;">
+            
+            <div class="screen-container">
+                <div class="screen-arc"></div>
+                <div style="font-size: 10px; letter-spacing: 2px; color: var(--text-secondary);">SCREEN 1</div>
+            </div>
+
+            <div class="layout-container">
+                <div class="wing" id="leftWing">
+                    <div class="wing-label">GENTS SECTION</div>
+                </div>
+                
+                <div class="wing" id="rightWing">
+                    <div class="wing-label">LADIES SECTION</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="checkout-bar">
+        <div>
+            <div style="font-size: 10px; text-transform: uppercase; color: var(--text-secondary);">Total</div>
+            <div style="font-size: 20px; font-weight: 800;" id="totalPrice">0 Pts</div>
+        </div>
+        <button class="btn-main" id="btnBook" disabled onclick="confirmBooking()">Select Seat</button>
+    </div>
+
+    <script type="module" src="booking.js"></script>
+    <script>lucide.createIcons();</script>
+</body>
+</html>
