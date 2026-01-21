@@ -11,7 +11,10 @@ export const TICK_IMAGES = {
 };
 
 export let state = {
-    currentUser: null, 
+    currentUser: {
+        id: null,
+        is_volunteer: false // <--- NEW: Added this flag
+    }, 
     userAuth: null,    
     checkInReward: 10,
     leaderboard: [],
