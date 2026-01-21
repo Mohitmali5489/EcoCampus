@@ -1,7 +1,6 @@
 /**
  * EcoCampus - Dashboard Module (dashboard.js)
- * Fully updated with Toast Notifications, AQI Logic, and Streak Management.
- * Update: Added Streak Restore Feature (SQL Integrated).
+ * Updated: Adds Volunteer Panel Access Button
  */
 
 import { supabase } from './supabase-client.js';
@@ -24,10 +23,6 @@ import { loadLeaderboardData } from './social.js';
 
 // --- DASHBOARD CORE DATA LOADING ---
 
-/**
- * Loads essential user data for the dashboard: Check-in status, Streaks, and Impact stats.
- * Uses strict column selection for performance.
- */
 export const loadDashboardData = async () => {
     // Optimization: One-Time Load Per Session unless forced refresh
     if (state.dashboardLoaded) {
@@ -43,14 +38,13 @@ export const loadDashboardData = async () => {
         const [
             { data: checkinData },
             { data: streakData },
-            { data: impactData }
+            { data: impactData },
+            { data: userData } // <--- NEW: Fetch Volunteer Status
         ] = await Promise.all([
-            // 1. Check if checked in today
             supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', todayIST).limit(1),
-            // 2. Get current streak status
             supabase.from('user_streaks').select('current_streak, last_checkin_date').eq('user_id', userId).single(),
-            // 3. Get total impact stats
-            supabase.from('user_impact').select('total_plastic_kg, co2_saved_kg, events_attended').eq('user_id', userId).maybeSingle()
+            supabase.from('user_impact').select('total_plastic_kg, co2_saved_kg, events_attended').eq('user_id', userId).maybeSingle(),
+            supabase.from('users').select('is_volunteer').eq('id', userId).single() // <--- NEW QUERY
         ]);
         
         // Update Global State
@@ -58,6 +52,7 @@ export const loadDashboardData = async () => {
         state.currentUser.checkInStreak = streakData ? streakData.current_streak : 0;
         state.currentUser.lastCheckInDate = streakData ? streakData.last_checkin_date : null; 
         state.currentUser.impact = impactData || { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
+        state.currentUser.is_volunteer = userData ? userData.is_volunteer : false; // <--- NEW SETTER
         
         state.dashboardLoaded = true;
 
@@ -69,9 +64,6 @@ export const loadDashboardData = async () => {
     }
 };
 
-/**
- * Master render function for the Dashboard page.
- */
 export const renderDashboard = () => {
     if (!state.currentUser) return; 
     renderDashboardUI();
@@ -114,6 +106,40 @@ const renderDashboardUI = () => {
     if(impactRecycled) impactRecycled.textContent = `${(user.impact?.total_plastic_kg || 0).toFixed(1)} kg`;
     if(impactCo2) impactCo2.textContent = `${(user.impact?.co2_saved_kg || 0).toFixed(1)} kg`;
     if(impactEvents) impactEvents.textContent = user.impact?.events_attended || 0;
+
+    // --- NEW: RENDER VOLUNTEER BUTTON IF ELIGIBLE ---
+    // We look for the first column in the dashboard grid to insert our button
+    const dashboardGrid = document.querySelector('#dashboard > div.grid > div:first-child');
+    let volunteerBtn = document.getElementById('dashboard-volunteer-btn');
+
+    if (user.is_volunteer) {
+        if (!volunteerBtn && dashboardGrid) {
+            const btn = document.createElement('button');
+            btn.id = "dashboard-volunteer-btn";
+            btn.onclick = () => window.location.href = 'volunteer/index.html'; // Redirect to new folder
+            btn.className = "w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-4 rounded-2xl shadow-lg flex items-center justify-between active:scale-[0.98] transition-all mb-6";
+            
+            btn.innerHTML = `
+                <div class="flex items-center gap-3">
+                    <div class="bg-white/20 p-2 rounded-full">
+                        <i data-lucide="shield-check" class="w-6 h-6 text-white"></i>
+                    </div>
+                    <div class="text-left">
+                        <h3 class="font-bold text-lg leading-tight">Volunteer Mode</h3>
+                        <p class="text-xs text-emerald-100 font-medium">Access scanner & logs</p>
+                    </div>
+                </div>
+                <i data-lucide="chevron-right" class="w-6 h-6 text-white/80"></i>
+            `;
+            
+            // Insert as the very first element in the first column
+            dashboardGrid.prepend(btn);
+            if(window.lucide) window.lucide.createIcons();
+        }
+    } else {
+        // If user is NOT volunteer but button exists (edge case), remove it
+        if (volunteerBtn) volunteerBtn.remove();
+    }
 };
 
 const renderCheckinButtonState = () => {
