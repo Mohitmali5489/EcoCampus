@@ -1,10 +1,10 @@
 /**
  * EcoCampus - Dashboard Module (dashboard.js)
- * Updated: Adds Volunteer Panel Access Button
+ * Updated: Adds OJAS 2.0 Sports Meet Logic
  */
 
 import { supabase } from './supabase-client.js';
-import { state } from './state.js';
+import { state, OJAS_CONFIG } from './state.js'; // <--- Updated Import
 import { 
     els, 
     formatDate, 
@@ -39,12 +39,12 @@ export const loadDashboardData = async () => {
             { data: checkinData },
             { data: streakData },
             { data: impactData },
-            { data: userData } // <--- NEW: Fetch Volunteer Status
+            { data: userData }
         ] = await Promise.all([
             supabase.from('daily_checkins').select('id').eq('user_id', userId).eq('checkin_date', todayIST).limit(1),
             supabase.from('user_streaks').select('current_streak, last_checkin_date').eq('user_id', userId).single(),
             supabase.from('user_impact').select('total_plastic_kg, co2_saved_kg, events_attended').eq('user_id', userId).maybeSingle(),
-            supabase.from('users').select('is_volunteer').eq('id', userId).single() // <--- NEW QUERY
+            supabase.from('users').select('is_volunteer').eq('id', userId).single()
         ]);
         
         // Update Global State
@@ -52,7 +52,7 @@ export const loadDashboardData = async () => {
         state.currentUser.checkInStreak = streakData ? streakData.current_streak : 0;
         state.currentUser.lastCheckInDate = streakData ? streakData.last_checkin_date : null; 
         state.currentUser.impact = impactData || { total_plastic_kg: 0, co2_saved_kg: 0, events_attended: 0 };
-        state.currentUser.is_volunteer = userData ? userData.is_volunteer : false; // <--- NEW SETTER
+        state.currentUser.is_volunteer = userData ? userData.is_volunteer : false;
         
         state.dashboardLoaded = true;
 
@@ -107,8 +107,7 @@ const renderDashboardUI = () => {
     if(impactCo2) impactCo2.textContent = `${(user.impact?.co2_saved_kg || 0).toFixed(1)} kg`;
     if(impactEvents) impactEvents.textContent = user.impact?.events_attended || 0;
 
-    // --- NEW: RENDER VOLUNTEER BUTTON IF ELIGIBLE ---
-    // We look for the first column in the dashboard grid to insert our button
+    // --- RENDER VOLUNTEER BUTTON IF ELIGIBLE ---
     const dashboardGrid = document.querySelector('#dashboard > div.grid > div:first-child');
     let volunteerBtn = document.getElementById('dashboard-volunteer-btn');
 
@@ -116,7 +115,7 @@ const renderDashboardUI = () => {
         if (!volunteerBtn && dashboardGrid) {
             const btn = document.createElement('button');
             btn.id = "dashboard-volunteer-btn";
-            btn.onclick = () => window.location.href = 'volunteer/index.html'; // Redirect to new folder
+            btn.onclick = () => window.location.href = 'volunteer/index.html'; 
             btn.className = "w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-4 rounded-2xl shadow-lg flex items-center justify-between active:scale-[0.98] transition-all mb-6";
             
             btn.innerHTML = `
@@ -131,13 +130,10 @@ const renderDashboardUI = () => {
                 </div>
                 <i data-lucide="chevron-right" class="w-6 h-6 text-white/80"></i>
             `;
-            
-            // Insert as the very first element in the first column
             dashboardGrid.prepend(btn);
             if(window.lucide) window.lucide.createIcons();
         }
     } else {
-        // If user is NOT volunteer but button exists (edge case), remove it
         if (volunteerBtn) volunteerBtn.remove();
     }
 };
@@ -172,7 +168,6 @@ const initAQI = () => {
     const card = document.getElementById('dashboard-aqi-card');
     if (!card) return;
 
-    // Only fetch if empty to avoid API spam
     if (card.innerHTML.trim() === "") {
         if (navigator.geolocation) {
             card.classList.remove('hidden');
@@ -199,11 +194,9 @@ const initAQI = () => {
 const fetchAQI = async (lat, lon) => {
     const card = document.getElementById('dashboard-aqi-card');
     try {
-        // Fetch AQI from Open-Meteo
         const aqiRes = await fetch(`https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=us_aqi`);
         const aqiData = await aqiRes.json();
         
-        // Fetch City Name from BigDataCloud (Free Reverse Geocoding)
         const locRes = await fetch(`https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
         const locData = await locRes.json();
         
@@ -516,9 +509,6 @@ export const handleStreakRestore = async () => {
         state.currentUser.current_points -= 50;
         state.currentUser.lastCheckInDate = getTodayIST(); // Restore sets checkin date to today
         
-        // We do NOT set isCheckedInToday = true here, because the restore fee is separate from the daily check-in.
-        // User must click "Check-in" again to actually log today's attendance and get +10 points.
-        
         showToast("Streak Restored! 🔥", "success");
         
         // Re-open modal to show the standard check-in button immediately
@@ -584,8 +574,44 @@ export const handleDailyCheckin = async () => {
     }
 };
 
+// --- OJAS 2.0 LOGIC (NEW) ---
+
+export const handleOjasClick = () => {
+    try {
+        const user = state.currentUser;
+        if (!user || !user.student_id) {
+            showToast('Student ID not found. Please log in again.', 'error');
+            return;
+        }
+
+        // 1. Convert Student ID string to Number
+        const numericId = parseInt(user.student_id, 10);
+        if (isNaN(numericId)) {
+             showToast('Invalid Student ID format.', 'error');
+             return;
+        }
+
+        // 2. Add Fixed Number (Obfuscation)
+        const encryptedId = numericId + OJAS_CONFIG.fixNumber;
+
+        // 3. Build Target URL
+        // Example: if id=50000, fix=5489 -> target?id=55489
+        const target = `${OJAS_CONFIG.targetUrl}?id=${encryptedId}`;
+        
+        logUserActivity('click_ojas', 'Opened OJAS 2.0 Sports Portal');
+        
+        // 4. Redirect
+        window.location.href = target;
+
+    } catch (err) {
+        console.error('OJAS Click Error:', err);
+        showToast('Could not open portal.', 'error');
+    }
+};
+
 // --- GLOBAL EXPORTS ---
 window.openCheckinModal = openCheckinModal;
 window.closeCheckinModal = closeCheckinModal;
 window.handleDailyCheckin = handleDailyCheckin;
 window.handleStreakRestore = handleStreakRestore;
+window.handleOjasClick = handleOjasClick; // Exported for HTML onclick
