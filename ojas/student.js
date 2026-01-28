@@ -29,7 +29,6 @@
     // --- INITIALIZATION ---
     document.addEventListener('DOMContentLoaded', async () => {
         if(window.lucide) lucide.createIcons();
-        // initTheme removed (Light theme forced in CSS)
         injectToastContainer();
         setupTabSystem();
         setupConfirmModal(); 
@@ -166,22 +165,101 @@
 
     // --- 4. DASHBOARD ---
     async function loadDashboard() {
-        window.loadLiveMatches(); 
+        // 1. Check Role and Show Admin Card if applicable
+        if (currentUser && currentUser.role === 'admin') {
+            const adminCard = document.getElementById('admin-dashboard-card');
+            if(adminCard) adminCard.classList.remove('hidden');
+        }
+
+        // 2. Load Public Data
         loadLatestChampions();
     }
 
-    window.loadLiveMatches = async function() { 
-        const list = document.getElementById('live-matches-list');
-        if(list) {
-            list.innerHTML = `<p class="text-sm text-slate-500 italic text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">No live matches currently.</p>`;
+    window.openAdminPanel = function() {
+        if(currentUser && currentUser.student_id) {
+            // Pass student_id to admin panel for role verification
+            window.location.href = `admin.html?id=${currentUser.student_id}`;
+        } else {
+            showToast("Error: User ID not found.", "error");
         }
     }
 
+    // --- UPDATED: WINNERS CARD LOGIC ---
     async function loadLatestChampions() {
         const container = document.getElementById('home-champions-list'); 
-        if (container) {
-            container.innerHTML = '<p class="text-sm text-slate-500 italic text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">No results declared yet.</p>';
+        if (!container) return;
+
+        // Loading State
+        container.innerHTML = '<div class="py-12 flex justify-center"><div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div></div>';
+
+        // Fetch from 'winners' table
+        const { data: winners, error } = await supabaseClient
+            .from('winners')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error("Winners Error:", error);
+            container.innerHTML = '<p class="text-xs text-red-500 text-center py-4">Failed to load winners.</p>';
+            return;
         }
+
+        if (!winners || winners.length === 0) {
+            container.innerHTML = '<p class="text-sm text-slate-500 italic text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">No results declared yet.</p>';
+            return;
+        }
+
+        // Render Cards (Matching requested design)
+        container.innerHTML = winners.map(w => `
+            <div class="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm mb-4">
+                
+                <div class="flex justify-between items-center mb-5 pb-3 border-b border-slate-50">
+                    <div class="flex items-center gap-3">
+                        <h4 class="font-extrabold text-slate-700 uppercase text-sm tracking-wide">${w.sport_name}</h4>
+                        <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-purple-100 text-purple-700 uppercase tracking-wide border border-purple-200">
+                            ${w.gender}
+                        </span>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-green-100 text-green-700 uppercase tracking-wide border border-green-200">
+                        Finished
+                    </span>
+                </div>
+
+                <div class="space-y-4">
+                    
+                    <div class="flex items-center gap-4">
+                        <div class="relative w-9 h-9 shrink-0 flex items-center justify-center">
+                            <div class="absolute inset-0 bg-yellow-100 rounded-full border border-yellow-200"></div>
+                            <i data-lucide="trophy" class="w-4 h-4 text-yellow-600 relative z-10"></i>
+                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-yellow-500 rounded-full text-[9px] text-white flex items-center justify-center font-bold border border-white">1</div>
+                        </div>
+                        <span class="font-bold text-slate-800 text-sm">${w.gold || 'TBD'}</span>
+                    </div>
+                    
+                    <div class="flex items-center gap-4">
+                        <div class="relative w-9 h-9 shrink-0 flex items-center justify-center">
+                            <div class="absolute inset-0 bg-slate-100 rounded-full border border-slate-200"></div>
+                            <i data-lucide="medal" class="w-4 h-4 text-slate-500 relative z-10"></i>
+                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-slate-400 rounded-full text-[9px] text-white flex items-center justify-center font-bold border border-white">2</div>
+                        </div>
+                        <span class="font-semibold text-slate-700 text-sm">${w.silver || '-'}</span>
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <div class="relative w-9 h-9 shrink-0 flex items-center justify-center">
+                            <div class="absolute inset-0 bg-amber-100 rounded-full border border-amber-200"></div>
+                            <i data-lucide="medal" class="w-4 h-4 text-amber-700 relative z-10"></i>
+                            <div class="absolute -top-1 -right-1 w-4 h-4 bg-amber-600 rounded-full text-[9px] text-white flex items-center justify-center font-bold border border-white">3</div>
+                        </div>
+                        <span class="font-medium text-slate-600 text-sm">${w.bronze || '-'}</span>
+                    </div>
+
+                </div>
+            </div>
+        `).join('');
+        
+        // Re-initialize icons
+        if(window.lucide) lucide.createIcons();
     }
 
     // --- 6. SCHEDULE MODULE ---
@@ -190,7 +268,6 @@
         const btnUp = document.getElementById('btn-schedule-upcoming');
         const btnRes = document.getElementById('btn-schedule-results');
         
-        // Revised CSS Classes for clean toggle (Light Only)
         const activeClass = "flex-1 py-2 rounded-lg text-xs font-semibold transition-all bg-indigo-50 text-indigo-600 shadow-sm border border-indigo-100";
         const inactiveClass = "flex-1 py-2 rounded-lg text-xs font-medium transition-all text-slate-500 hover:bg-slate-50";
         
