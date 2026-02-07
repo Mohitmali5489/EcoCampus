@@ -1,10 +1,11 @@
 /**
  * EcoCampus - Dashboard Module (dashboard.js)
- * Updated: Standard Dashboard State (OJAS Logic Removed)
+ * Updated: Valentine's "Eco-Romantic" Immersive Edition
+ * Features: Randomized Particle Rain, Dynamic Theme Buttons, Quote Widget
  */
 
 import { supabase } from './supabase-client.js';
-import { state } from './state.js'; 
+import { state, VALENTINE_DAYS } from './state.js'; 
 import { 
     els, 
     formatDate, 
@@ -16,7 +17,9 @@ import {
     uploadToCloudinary, 
     getTodayIST, 
     logUserActivity, 
-    showToast 
+    showToast,
+    getValentineTheme,
+    isLowDataMode
 } from './utils.js';
 import { refreshUserData } from './app.js';
 import { loadLeaderboardData } from './social.js';
@@ -68,7 +71,134 @@ export const renderDashboard = () => {
     if (!state.currentUser) return; 
     renderDashboardUI();
     renderCheckinButtonState();
+    renderValentineWidget(); // NEW: Check and render Valentine theme
     initAQI(); 
+};
+
+// --- VALENTINE'S THEME LOGIC (ECO-ROMANTIC UPDATE) ---
+
+const renderValentineWidget = () => {
+    const theme = getValentineTheme();
+    const dashboardLeftCol = document.querySelector('#dashboard > div.grid > div:first-child');
+    
+    // Cleanup existing widget if any
+    const existingWidget = document.getElementById('vday-hero-card');
+    if (existingWidget) existingWidget.remove();
+    
+    // Cleanup visuals if theme expired
+    if (!theme) {
+        const visuals = document.getElementById('vday-visuals');
+        const bgLayer = document.querySelector('.heart-bg-layer');
+        if (visuals) visuals.remove();
+        if (bgLayer) bgLayer.remove();
+        return;
+    }
+
+    if (!dashboardLeftCol) return;
+
+    const today = new Date().getDate();
+    // Fallback to 14 if testing or out of range
+    const config = VALENTINE_DAYS[today] || VALENTINE_DAYS[14]; 
+
+    // 1. Render Hero Card with "Eco-Romantic" Style
+    // Uses glow-card and glass-card-love for pink tint
+    const card = document.createElement('div');
+    card.id = 'vday-hero-card';
+    card.className = "glass-card-love glow-card p-6 mb-6 relative overflow-hidden group animate-slideUp";
+    
+    // Dynamic content: Quote focused, no buttons
+    // ADDED HEART ICON in the bottom right of the quote area
+    card.innerHTML = `
+        <div class="absolute -right-6 -top-6 opacity-20 transform rotate-12 group-hover:scale-110 transition-transform duration-1000">
+            <i data-lucide="${config.icon}" class="w-40 h-40 ${config.color.split(' ')[0]}"></i>
+        </div>
+        
+        <div class="relative z-10">
+            <div class="flex items-center gap-2 mb-3">
+                <span class="inline-flex items-center px-3 py-1 rounded-full text-[10px] font-bold bg-white/60 dark:bg-black/30 backdrop-blur-md border border-white/40 shadow-sm ${config.color} uppercase tracking-wider">
+                    <i data-lucide="sparkles" class="w-3 h-3 mr-1"></i> ${config.title}
+                </span>
+            </div>
+
+            <h3 class="text-xl font-bold ${config.color} mb-2 font-jakarta leading-tight">
+                ${config.desc}
+            </h3>
+
+            <div class="mt-4 relative">
+                <div class="absolute -left-2 -top-2 text-4xl opacity-20 ${config.color}">“</div>
+                <div class="bg-white/40 dark:bg-black/20 backdrop-blur-sm rounded-xl p-4 border border-white/20 shadow-inner">
+                    <p class="text-lg md:text-xl text-gray-800 dark:text-gray-100 font-dancing text-center leading-relaxed glow-text">
+                        ${config.quote}
+                    </p>
+                    
+                    <div class="flex justify-center mt-3 gap-2">
+                        <i data-lucide="leaf" class="w-5 h-5 text-green-600 dark:text-green-400"></i>
+                        <i data-lucide="heart" class="w-5 h-5 text-red-500 fill-red-500 animate-pulse"></i>
+                    </div>
+
+                </div>
+                <div class="absolute -right-1 -bottom-4 text-4xl opacity-20 ${config.color}">”</div>
+            </div>
+        </div>
+    `;
+
+    // Insert as first item
+    dashboardLeftCol.prepend(card);
+    
+    // 2. Trigger Visuals (Hearts & Background)
+    renderValentineVisuals(config);
+
+    if (window.lucide) window.lucide.createIcons();
+};
+
+const renderValentineVisuals = (config) => {
+    if (isLowDataMode()) return;
+
+    // A. Inject Scrolling Heart Background (Safe check)
+    if (!document.querySelector('.heart-bg-layer')) {
+        const bgLayer = document.createElement('div');
+        bgLayer.className = 'heart-bg-layer';
+        document.body.prepend(bgLayer); 
+    }
+
+    // B. Floating Emojis (The Love Shower)
+    // Only create container if it doesn't exist
+    if (document.getElementById('vday-visuals')) return;
+
+    const container = document.createElement('div');
+    container.id = 'vday-visuals';
+    container.className = 'v-floating-container';
+
+    // Map icons to emojis
+    const emojiMap = {
+        'flower': '🌹',
+        'heart-handshake': '💍',
+        'cookie': '🍫',
+        'smile': '🧸',
+        'shield-check': '🤞',
+        'users': '🤗',
+        'heart': '💋',
+        'sparkles': '💖'
+    };
+    const emoji = emojiMap[config.icon] || '❤️';
+
+    // Create 15 floating items with RANDOMIZED positions for organic rain effect
+    let html = '';
+    for(let i=0; i<15; i++) {
+        // Random horizontal position (0-100%)
+        const left = Math.floor(Math.random() * 100);
+        // Random animation duration (6s to 12s)
+        const duration = 6 + Math.random() * 6;
+        // Random delay (-5s to 0s) so they start at different heights immediately
+        const delay = -(Math.random() * 5);
+        // Random size scaling (0.8 to 1.5)
+        const scale = 0.8 + Math.random() * 0.7;
+
+        html += `<div class="v-float-item" style="left: ${left}%; animation-duration: ${duration}s; animation-delay: ${delay}s; font-size: ${scale}rem;">${emoji}</div>`;
+    }
+    container.innerHTML = html;
+    
+    document.body.appendChild(container);
 };
 
 // --- UI RENDERING HELPERS ---
@@ -116,7 +246,10 @@ const renderDashboardUI = () => {
             const btn = document.createElement('button');
             btn.id = "dashboard-volunteer-btn";
             btn.onclick = () => window.location.href = 'volunteer/index.html'; 
-            btn.className = "w-full bg-gradient-to-r from-emerald-600 to-teal-600 text-white p-4 rounded-2xl shadow-lg flex items-center justify-between active:scale-[0.98] transition-all mb-6";
+            
+            // DYNAMIC COLOR: Uses Theme Variables!
+            // Defaults to Green, turns Pink/Red if theme is active
+            btn.className = "w-full bg-gradient-to-r from-[var(--v-primary)] to-[var(--v-accent)] text-white p-4 rounded-2xl shadow-lg flex items-center justify-between active:scale-[0.98] transition-all mb-6";
             
             btn.innerHTML = `
                 <div class="flex items-center gap-3">
@@ -125,12 +258,19 @@ const renderDashboardUI = () => {
                     </div>
                     <div class="text-left">
                         <h3 class="font-bold text-lg leading-tight">Volunteer Mode</h3>
-                        <p class="text-xs text-emerald-100 font-medium">Access scanner & logs</p>
+                        <p class="text-xs text-white/90 font-medium">Access scanner & logs</p>
                     </div>
                 </div>
                 <i data-lucide="chevron-right" class="w-6 h-6 text-white/80"></i>
             `;
-            dashboardGrid.prepend(btn);
+            
+            // If Valentine hero exists, insert after it, else prepend
+            const vHero = document.getElementById('vday-hero-card');
+            if (vHero) {
+                vHero.after(btn);
+            } else {
+                dashboardGrid.prepend(btn);
+            }
             if(window.lucide) window.lucide.createIcons();
         }
     } else {
@@ -157,6 +297,7 @@ const renderCheckinButtonState = () => {
         btn.onclick = null; 
     } else {
         btn.classList.remove('checkin-completed');
+        // Keep Check-in Gold/Orange for "Points" context
         btn.classList.add('from-yellow-400', 'to-orange-400', 'dark:from-yellow-500', 'dark:to-orange-500', 'bg-gradient-to-r');
         btn.onclick = openCheckinModal;
     }
@@ -228,6 +369,7 @@ const renderAQICard = (card, aqi, city) => {
         advice = "High pollution. Wear a mask if outside!";
     }
 
+    // AQI Card uses new styles too
     card.innerHTML = `
         <div class="bg-gradient-to-br ${colorClass} border p-5 rounded-2xl shadow-sm relative overflow-hidden animate-breathe">
             <div class="relative z-10 flex justify-between items-start">
@@ -504,18 +646,13 @@ export const handleStreakRestore = async () => {
 
         logUserActivity('streak_restore', 'Restored streak with points');
         
-        // Update Local State
-        state.currentUser.checkInStreak = data.restored_streak; 
+        // Update Local State for points only (Streak will be updated by handleDailyCheckin)
         state.currentUser.current_points -= 50;
-        state.currentUser.lastCheckInDate = getTodayIST(); // Restore sets checkin date to today
         
-        showToast("Streak Restored! 🔥", "success");
+        showToast("Streak Restored! Checking you in...", "success");
         
-        // Re-open modal to show the standard check-in button immediately
-        openCheckinModal();
-        
-        renderDashboardUI();
-        await refreshUserData();
+        // FIX: Immediately trigger daily check-in to continue the streak correctly
+        await handleDailyCheckin();
 
     } catch (err) {
         console.error("Streak Restore Error:", err);
