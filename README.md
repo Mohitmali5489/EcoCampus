@@ -46,15 +46,3 @@ Since this project uses **ES Modules** (`type="module"` in script tags), it cann
 2.  **Supabase Account** with a new project.
 3.  **Cloudinary Account** for image hosting.
 
-### 1. Clone & Serve
-```bash
-# Clone the repository
-git clone [https://github.com/your-username/ecocampus.git](https://github.com/your-username/ecocampus.git)
-
-# Navigate to directory
-cd ecocampus
-
-# Start a local server (using npx serve, Python, or Live Server in VS Code)
-npx serve .
-# OR
-python3 -m http.server
