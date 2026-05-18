@@ -326,73 +326,37 @@ if (redeemForm) {
 // --- START APP ---
 window.handleLogout = handleLogout;
 checkAuth();
-// --- CAPACITOR PLUGINS (UNITY ADS - DEBUG VERSION) ---
+// --- CAPACITOR PLUGINS (ADMOB INTERSTITIAL) ---
 document.addEventListener('DOMContentLoaded', async () => {
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.UnityAds) {
-        const UnityAds = window.Capacitor.Plugins.UnityAds;
-        const App = window.Capacitor.Plugins.App;
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AdMob) {
+        const AdMob = window.Capacitor.Plugins.AdMob;
         
-        // 🚨 MAKE SURE THESE ARE YOUR REAL IDs 🚨
-        const GAME_ID = '6080425'; 
-        const AD_UNIT_ID = 'Interstitial_Android'; 
+        // 🚨 GOOGLE'S OFFICIAL TEST ID (Guaranteed to show instantly) 🚨
+        // Only change this to your real Ad Unit ID AFTER you see the test ad work!
+        const testAdId = 'ca-app-pub-3940256099942544/1033173712'; 
 
         try {
-            console.log("Unity: Starting Initialization...");
-            
-            // 1. Initialize Unity Ads
-            await UnityAds.initialize({
-                gameId: GAME_ID,
-                testMode: true 
+            // 1. Initialize AdMob
+            await AdMob.initialize({
+                initializeForTesting: true // Forces ads to load during testing
             });
-            console.log("Unity: Initialized Successfully!");
 
-            // 2. Helper function
-            const showUnityAd = async () => {
-                try {
-                    console.log(`Unity: Attempting to load ad for ${AD_UNIT_ID}...`);
-                    // Request the ad
-                    await UnityAds.loadInterstitial({ placementId: AD_UNIT_ID });
-                    
-                    // Wait for it to load
-                    let attempts = 0;
-                    const checkLoad = setInterval(async () => {
-                        attempts++;
-                        const { loaded } = await UnityAds.isInterstitialLoaded();
-                        
-                        if (loaded) {
-                            console.log("Unity: Ad Loaded! Showing now...");
-                            clearInterval(checkLoad);
-                            await UnityAds.showInterstitial();
-                        } else {
-                            console.log(`Unity: Waiting for ad... (Attempt ${attempts})`);
-                            if (attempts > 15) {
-                                console.log("Unity: Ad took too long to load. Canceling.");
-                                clearInterval(checkLoad); 
-                            }
-                        }
-                    }, 500);
-                } catch (err) {
-                    console.error("Unity Ad Show Error:", err);
-                    alert("Unity Ad Error: " + JSON.stringify(err)); // Pop up an alert so you can see it on your phone!
-                }
-            };
+            // 2. Prepare the full-screen ad in the background
+            await AdMob.prepareInterstitial({ adId: testAdId });
 
-            // Request first ad
-            showUnityAd();
+            // 3. LISTENERS: Only show the ad ONCE it has completely downloaded
+            AdMob.addListener('interstitialAdLoaded', () => {
+                // The video/image is downloaded! Now show it on screen.
+                AdMob.showInterstitial();
+            });
 
-            // Listen for app resume
-            if (App) {
-                App.addListener('appStateChange', (state) => {
-                    if (state.isActive) {
-                        showUnityAd();
-                    }
-                });
-            }
+            // If you have bad Wi-Fi or Google blocks it, this alert will tell you why
+            AdMob.addListener('interstitialAdFailedToLoad', (err) => {
+                alert("AdMob Network Error: Ad failed to download from Google. " + JSON.stringify(err));
+            });
+
         } catch (error) {
-            console.error("Unity Ads Init Error:", error);
-            alert("Unity Init Error: " + JSON.stringify(error)); // Pop up an alert if initialization fails
+            alert("AdMob Initialization Error: " + JSON.stringify(error));
         }
-    } else {
-        alert("Unity Ads plugin not detected by the app.");
     }
 });
