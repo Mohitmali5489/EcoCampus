@@ -326,37 +326,38 @@ if (redeemForm) {
 // --- START APP ---
 window.handleLogout = handleLogout;
 checkAuth();
-// --- CAPACITOR PLUGINS (ADMOB INTERSTITIAL) ---
-document.addEventListener('DOMContentLoaded', async () => {
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AdMob) {
-        const AdMob = window.Capacitor.Plugins.AdMob;
+
+// --- CAPACITOR PLUGINS (AGGRESSIVE ADMOB DEBUG) ---
+// This waits 2 seconds for the app to visually load before testing AdMob
+setTimeout(async () => {
+    try {
+        alert("STEP 1: App loaded. Checking for Capacitor...");
         
-        // 🚨 GOOGLE'S OFFICIAL TEST ID (Guaranteed to show instantly) 🚨
-        // Only change this to your real Ad Unit ID AFTER you see the test ad work!
-        const testAdId = 'ca-app-pub-3940256099942544/1033173712'; 
-
-        try {
-            // 1. Initialize AdMob
-            await AdMob.initialize({
-                initializeForTesting: true // Forces ads to load during testing
-            });
-
-            // 2. Prepare the full-screen ad in the background
-            await AdMob.prepareInterstitial({ adId: testAdId });
-
-            // 3. LISTENERS: Only show the ad ONCE it has completely downloaded
-            AdMob.addListener('interstitialAdLoaded', () => {
-                // The video/image is downloaded! Now show it on screen.
-                AdMob.showInterstitial();
-            });
-
-            // If you have bad Wi-Fi or Google blocks it, this alert will tell you why
-            AdMob.addListener('interstitialAdFailedToLoad', (err) => {
-                alert("AdMob Network Error: Ad failed to download from Google. " + JSON.stringify(err));
-            });
-
-        } catch (error) {
-            alert("AdMob Initialization Error: " + JSON.stringify(error));
+        if (!window.Capacitor) {
+            alert("CRASH: Capacitor is completely missing.");
+            return;
         }
+        if (!window.Capacitor.Plugins.AdMob) {
+            alert("CRASH: AdMob plugin was not installed properly during the cloud build.");
+            return;
+        }
+        
+        const AdMob = window.Capacitor.Plugins.AdMob;
+        alert("STEP 2: AdMob plugin found! Initializing...");
+        
+        await AdMob.initialize({ initializeForTesting: true });
+        alert("STEP 3: Initialization successful! Requesting Google Test Ad...");
+        
+        // Use await here to pause the code until the ad fully downloads
+        await AdMob.prepareInterstitial({ 
+            adId: 'ca-app-pub-3940256099942544/1033173712',
+            isTesting: true 
+        });
+        
+        alert("STEP 4: Test Ad successfully downloaded from the internet! Showing now...");
+        await AdMob.showInterstitial();
+        
+    } catch (err) {
+        alert("CRASH ERROR: " + JSON.stringify(err));
     }
-});
+}, 2000);
