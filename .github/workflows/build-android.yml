@@ -1,8 +1,8 @@
-name: Build Android App
+name: Build Android APK
 
 on:
   push:
-    branches: [ "main" ] # or "master", whatever your main branch is called
+    branches: [ "main", "master" ]
   workflow_dispatch:
 
 jobs:
@@ -10,25 +10,45 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '20'
 
-    - name: Install Dependencies
-      run: npm install
+    - name: Initialize Project & Install Capacitor
+      run: |
+        npm init -y
+        npm install @capacitor/core @capacitor/android
+        npm install -D @capacitor/cli
 
-    - name: Sync Capacitor
-      run: npx cap sync android
+    - name: Configure Capacitor
+      run: |
+        npx cap init EcoCampus com.mohit.ecocampus --web-dir .
+        echo '{
+          "appId": "com.mohit.ecocampus",
+          "appName": "EcoCampus",
+          "webDir": ".",
+          "bundledWebRuntime": false,
+          "server": {
+            "url": "https://mohitmali5489.github.io/ecocampus/",
+            "cleartext": true
+          }
+        }' > capacitor.config.json
 
-    - name: Build APK
+    - name: Add Android Platform
+      run: npx cap add android
+
+    - name: Build Android APK
       working-directory: ./android
-      run: ./gradlew assembleDebug
+      run: |
+        chmod +x ./gradlew
+        ./gradlew assembleDebug
 
     - name: Upload APK
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
-        name: app-debug
+        name: EcoCampus-Android-App
         path: android/app/build/outputs/apk/debug/app-debug.apk
