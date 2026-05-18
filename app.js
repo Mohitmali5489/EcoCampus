@@ -1,6 +1,6 @@
 /**
  * EcoCampus - Main Application Logic (app.js)
- * Final Version: Standard Dashboard State + Valentine's Auto-Trigger
+ * Final Version: Standard Dashboard State + Valentine's Auto-Trigger + AdMob
  */
 
 import { supabase } from './supabase-client.js';
@@ -326,3 +326,48 @@ if (redeemForm) {
 // --- START APP ---
 window.handleLogout = handleLogout;
 checkAuth();
+
+// --- CAPACITOR PLUGINS (ADMOB APP OPEN ADS) ---
+document.addEventListener('DOMContentLoaded', async () => {
+    // Check if running in a native Capacitor app with AdMob installed
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AdMob) {
+        const AdMob = window.Capacitor.Plugins.AdMob;
+        const App = window.Capacitor.Plugins.App;
+        const appOpenAdId = 'ca-app-pub-1536423251414270/6264893150'; // Your specific Ad Unit ID
+
+        try {
+            // Initialize AdMob
+            await AdMob.initialize();
+
+            // Prepare the App Open Ad in the background
+            await AdMob.prepareAppOpen({
+                adId: appOpenAdId,
+                orientationType: 'PORTRAIT' // Keeps the ad locked to vertical
+            });
+
+            // Show it immediately on the very first app load
+            await AdMob.showAppOpen();
+            
+            // Re-prepare the next ad so it's ready in the background for next time
+            await AdMob.prepareAppOpen({ adId: appOpenAdId, orientationType: 'PORTRAIT' });
+
+            // Listen for the app resuming from the background
+            if (App) {
+                App.addListener('appStateChange', async (state) => {
+                    // If the app becomes active again, show the ad
+                    if (state.isActive) {
+                        try {
+                            await AdMob.showAppOpen();
+                            // Prepare the next one
+                            await AdMob.prepareAppOpen({ adId: appOpenAdId, orientationType: 'PORTRAIT' });
+                        } catch (err) {
+                            console.log("Ad not ready yet", err);
+                        }
+                    }
+                });
+            }
+        } catch (error) {
+            console.error("AdMob Initialization Error:", error);
+        }
+    }
+});
