@@ -1,0 +1,34 @@
+name: Build Android App
+
+on:
+  push:
+    branches: [ "main" ] # or "master", whatever your main branch is called
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Sync Capacitor
+      run: npx cap sync android
+
+    - name: Build APK
+      working-directory: ./android
+      run: ./gradlew assembleDebug
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: app-debug
+        path: android/app/build/outputs/apk/debug/app-debug.apk
