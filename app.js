@@ -333,36 +333,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AdMob) {
         const AdMob = window.Capacitor.Plugins.AdMob;
         const App = window.Capacitor.Plugins.App;
-        const appOpenAdId = 'ca-app-pub-1536423251414270/6264893150'; // Your specific Ad Unit ID
+        
+        // 🚨 USING GOOGLE'S TEST ID FIRST TO VERIFY IT WORKS 🚨
+        // Once this test ad appears on your screen, change this back to your real ID: ca-app-pub-1536423251414270/6264893150
+        const appOpenAdId = 'ca-app-pub-3940256099942544/9257395921'; 
 
         try {
             // Initialize AdMob
-            await AdMob.initialize();
-
-            // Prepare the App Open Ad in the background
-            await AdMob.prepareAppOpen({
-                adId: appOpenAdId,
-                orientationType: 'PORTRAIT' // Keeps the ad locked to vertical
+            await AdMob.initialize({
+                initializeForTesting: true // Helps force ads to show during development
             });
 
-            // Show it immediately on the very first app load
-            await AdMob.showAppOpen();
-            
-            // Re-prepare the next ad so it's ready in the background for next time
-            await AdMob.prepareAppOpen({ adId: appOpenAdId, orientationType: 'PORTRAIT' });
+            // LISTENERS: Wait for the ad to actually finish downloading over the internet!
+            AdMob.addListener('appOpenAdLoaded', () => {
+                // The ad is fully downloaded! Now we can safely show it.
+                AdMob.showAppOpen();
+            });
+
+            AdMob.addListener('appOpenAdFailedToLoad', (err) => {
+                console.error("AdMob Failed to load the ad from the internet:", err);
+            });
+
+            // Request the very first ad
+            await AdMob.prepareAppOpen({
+                adId: appOpenAdId,
+                orientationType: 'PORTRAIT' 
+            });
 
             // Listen for the app resuming from the background
             if (App) {
                 App.addListener('appStateChange', async (state) => {
-                    // If the app becomes active again, show the ad
+                    // If the app becomes active again, request a new ad. 
+                    // (The 'appOpenAdLoaded' listener above will automatically show it when it's ready!)
                     if (state.isActive) {
-                        try {
-                            await AdMob.showAppOpen();
-                            // Prepare the next one
-                            await AdMob.prepareAppOpen({ adId: appOpenAdId, orientationType: 'PORTRAIT' });
-                        } catch (err) {
-                            console.log("Ad not ready yet", err);
-                        }
+                        await AdMob.prepareAppOpen({ 
+                            adId: appOpenAdId, 
+                            orientationType: 'PORTRAIT' 
+                        });
                     }
                 });
             }
