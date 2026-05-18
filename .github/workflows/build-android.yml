@@ -29,8 +29,8 @@ jobs:
         npm init -y
         npm install @capacitor/core @capacitor/android
         npm install -D @capacitor/cli
-        # Installed Unity Ads instead of AdMob
-        npm install capacitor-unity-ads @capacitor/app
+        # Officially Maintained AdMob Plugin
+        npm install @capacitor-community/admob @capacitor/app
 
     - name: Bundle Website Files (Offline Mode)
       run: |
@@ -50,11 +50,14 @@ jobs:
     - name: Add Android Platform
       run: npx cap add android
 
-    - name: Inject Permissions
+    - name: Inject Permissions and AdMob App ID
       run: |
         MANIFEST="android/app/src/main/AndroidManifest.xml"
-        # 1. Inject Hardware Permissions (No AdMob ID needed anymore!)
+        # 1. Inject Hardware Permissions
         sed -i 's|</manifest>|    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n</manifest>|g' $MANIFEST
+        
+        # 2. Inject Your Real AdMob App ID (Required so the app doesn't crash)
+        sed -i 's|</application>|    <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-1536423251414270~6456464841" />\n</application>|g' $MANIFEST
 
     - name: Fix Kotlin Duplicate Classes
       run: |
