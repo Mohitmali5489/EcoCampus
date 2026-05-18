@@ -326,63 +326,73 @@ if (redeemForm) {
 // --- START APP ---
 window.handleLogout = handleLogout;
 checkAuth();
-
-// --- CAPACITOR PLUGINS (UNITY ADS) ---
+// --- CAPACITOR PLUGINS (UNITY ADS - DEBUG VERSION) ---
 document.addEventListener('DOMContentLoaded', async () => {
-    // Check if running in a native Capacitor app with Unity Ads installed
     if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.UnityAds) {
         const UnityAds = window.Capacitor.Plugins.UnityAds;
         const App = window.Capacitor.Plugins.App;
         
-        // 🚨 REPLACE THESE WITH THE IDs FROM YOUR UNITY DASHBOARD 🚨
-        const GAME_ID = '6080425'; // Your 7-digit Android Game ID
-        const AD_UNIT_ID = 'Interstitial_Android'; // Your Ad Unit / Placement ID
+        // 🚨 MAKE SURE THESE ARE YOUR REAL IDs 🚨
+        const GAME_ID = '6080425'; 
+        const AD_UNIT_ID = 'Interstitial_Android'; 
 
         try {
+            console.log("Unity: Starting Initialization...");
+            
             // 1. Initialize Unity Ads
             await UnityAds.initialize({
                 gameId: GAME_ID,
-                testMode: true // IMPORTANT: Set this to false when you publish to the Play Store!
+                testMode: true 
             });
+            console.log("Unity: Initialized Successfully!");
 
-            // 2. Helper function to safely load and show the ad
+            // 2. Helper function
             const showUnityAd = async () => {
                 try {
-                    // Tell Unity to fetch an ad from the internet
+                    console.log(`Unity: Attempting to load ad for ${AD_UNIT_ID}...`);
+                    // Request the ad
                     await UnityAds.loadInterstitial({ placementId: AD_UNIT_ID });
                     
-                    // Wait for the ad to finish downloading, checking every half-second
+                    // Wait for it to load
                     let attempts = 0;
                     const checkLoad = setInterval(async () => {
                         attempts++;
                         const { loaded } = await UnityAds.isInterstitialLoaded();
                         
                         if (loaded) {
+                            console.log("Unity: Ad Loaded! Showing now...");
                             clearInterval(checkLoad);
-                            await UnityAds.showInterstitial(); // Show the ad!
-                        } else if (attempts > 10) {
-                            clearInterval(checkLoad); // Stop trying if it takes longer than 5 seconds
+                            await UnityAds.showInterstitial();
+                        } else {
+                            console.log(`Unity: Waiting for ad... (Attempt ${attempts})`);
+                            if (attempts > 15) {
+                                console.log("Unity: Ad took too long to load. Canceling.");
+                                clearInterval(checkLoad); 
+                            }
                         }
                     }, 500);
                 } catch (err) {
-                    console.log("Unity Ad Load Error:", err);
+                    console.error("Unity Ad Show Error:", err);
+                    alert("Unity Ad Error: " + JSON.stringify(err)); // Pop up an alert so you can see it on your phone!
                 }
             };
 
-            // 3. Request the very first ad when the app opens
+            // Request first ad
             showUnityAd();
 
-            // 4. Listen for the app resuming from the background
+            // Listen for app resume
             if (App) {
                 App.addListener('appStateChange', (state) => {
-                    // If the app becomes active again, show a new ad
                     if (state.isActive) {
                         showUnityAd();
                     }
                 });
             }
         } catch (error) {
-            console.error("Unity Ads Initialization Error:", error);
+            console.error("Unity Ads Init Error:", error);
+            alert("Unity Init Error: " + JSON.stringify(error)); // Pop up an alert if initialization fails
         }
+    } else {
+        alert("Unity Ads plugin not detected by the app.");
     }
 });
