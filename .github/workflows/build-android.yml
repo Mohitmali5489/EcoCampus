@@ -24,13 +24,15 @@ jobs:
         npm install @capacitor/core @capacitor/android
         npm install -D @capacitor/cli
 
-    - name: Configure Capacitor
+    - name: Configure Capacitor & Create Dummy WebDir
       run: |
-        npx cap init EcoCampus com.mohit.ecocampus --web-dir .
+        mkdir www
+        echo "<html><body>Loading EcoCampus...</body></html>" > www/index.html
+        npx cap init EcoCampus com.mohit.ecocampus --web-dir www
         echo '{
           "appId": "com.mohit.ecocampus",
           "appName": "EcoCampus",
-          "webDir": ".",
+          "webDir": "www",
           "bundledWebRuntime": false,
           "server": {
             "url": "https://mohitmali5489.github.io/ecocampus/",
