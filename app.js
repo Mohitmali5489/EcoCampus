@@ -335,7 +335,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const App = window.Capacitor.Plugins.App;
         
         // 🚨 REPLACE THESE WITH THE IDs FROM YOUR UNITY DASHBOARD 🚨
-        const GAME_ID = '1234567'; // Your 7-digit Android Game ID
+        const GAME_ID = '6080425'; // Your 7-digit Android Game ID
         const AD_UNIT_ID = 'Interstitial_Android'; // Your Ad Unit / Placement ID
 
         try {
