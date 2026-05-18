@@ -327,37 +327,49 @@ if (redeemForm) {
 window.handleLogout = handleLogout;
 checkAuth();
 
-// --- CAPACITOR PLUGINS (AGGRESSIVE ADMOB DEBUG) ---
-// This waits 2 seconds for the app to visually load before testing AdMob
-setTimeout(async () => {
-    try {
-        alert("STEP 1: App loaded. Checking for Capacitor...");
-        
-        if (!window.Capacitor) {
-            alert("CRASH: Capacitor is completely missing.");
-            return;
-        }
-        if (!window.Capacitor.Plugins.AdMob) {
-            alert("CRASH: AdMob plugin was not installed properly during the cloud build.");
-            return;
-        }
-        
+// --- CAPACITOR PLUGINS (ADMOB INTERSTITIAL - PRODUCTION) ---
+document.addEventListener('DOMContentLoaded', async () => {
+    // Check if running natively with AdMob installed
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AdMob) {
         const AdMob = window.Capacitor.Plugins.AdMob;
-        alert("STEP 2: AdMob plugin found! Initializing...");
+        const App = window.Capacitor.Plugins.App;
         
-        await AdMob.initialize({ initializeForTesting: true });
-        alert("STEP 3: Initialization successful! Requesting Google Test Ad...");
-        
-        // Use await here to pause the code until the ad fully downloads
-        await AdMob.prepareInterstitial({ 
-            adId: 'ca-app-pub-3940256099942544/1033173712',
-            isTesting: true 
-        });
-        
-        alert("STEP 4: Test Ad successfully downloaded from the internet! Showing now...");
-        await AdMob.showInterstitial();
-        
-    } catch (err) {
-        alert("CRASH ERROR: " + JSON.stringify(err));
+        // 🚨 YOUR REAL AD UNIT ID 🚨
+        const realAdId = 'ca-app-pub-1536423251414270/2709625677'; 
+
+        try {
+            // 1. Initialize AdMob (Testing mode is now OFF)
+            await AdMob.initialize();
+
+            // 2. Helper function to safely request an ad
+            const requestAd = async () => {
+                try {
+                    await AdMob.prepareInterstitial({ adId: realAdId });
+                } catch (err) {
+                    console.log("AdMob failed to prepare ad:", err);
+                }
+            };
+
+            // 3. ONLY show the ad once it is completely downloaded
+            AdMob.addListener('interstitialAdLoaded', () => {
+                AdMob.showInterstitial();
+            });
+
+            // 4. Request the very first ad
+            requestAd();
+
+            // 5. Listen for the app resuming from the background
+            if (App) {
+                App.addListener('appStateChange', (state) => {
+                    // If the app becomes active again, request a new ad
+                    if (state.isActive) {
+                        requestAd();
+                    }
+                });
+            }
+
+        } catch (error) {
+            console.error("AdMob Initialization Error:", error);
+        }
     }
-}, 2000);
+});
