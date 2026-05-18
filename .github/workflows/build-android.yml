@@ -24,30 +24,34 @@ jobs:
         distribution: 'temurin'
         java-version: '21'
 
-    - name: Initialize Project & Install Capacitor
+    - name: Initialize Project & Install Tools
       run: |
         npm init -y
         npm install @capacitor/core @capacitor/android
         npm install -D @capacitor/cli
 
-    - name: Configure Capacitor & Create Dummy WebDir
+    - name: Bundle Website Files (Offline Mode)
       run: |
         mkdir www
-        echo "<html><body>Loading EcoCampus...</body></html>" > www/index.html
+        rsync -av --exclude='www' --exclude='android' --exclude='.git' --exclude='.github' --exclude='node_modules' ./ www/
+
+    - name: Configure Capacitor
+      run: |
         npx cap init EcoCampus com.mohit.ecocampus --web-dir www
         echo '{
           "appId": "com.mohit.ecocampus",
           "appName": "EcoCampus",
           "webDir": "www",
-          "bundledWebRuntime": false,
-          "server": {
-            "url": "https://mohitmali5489.github.io/ecocampus/",
-            "cleartext": true
-          }
+          "bundledWebRuntime": false
         }' > capacitor.config.json
 
     - name: Add Android Platform
       run: npx cap add android
+
+    - name: Inject Android Permissions
+      run: |
+        MANIFEST="android/app/src/main/AndroidManifest.xml"
+        sed -i 's|</manifest>|    <uses-permission android:name="android.permission.CAMERA" />\n    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />\n    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />\n    <uses-feature android:name="android.hardware.camera" android:required="false" />\n    <uses-feature android:name="android.hardware.location.gps" android:required="false" />\n</manifest>|g' $MANIFEST
 
     - name: Fix Kotlin Duplicate Classes
       run: |
