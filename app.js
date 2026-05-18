@@ -327,54 +327,62 @@ if (redeemForm) {
 window.handleLogout = handleLogout;
 checkAuth();
 
-// --- CAPACITOR PLUGINS (ADMOB APP OPEN ADS) ---
+// --- CAPACITOR PLUGINS (UNITY ADS) ---
 document.addEventListener('DOMContentLoaded', async () => {
-    // Check if running in a native Capacitor app with AdMob installed
-    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.AdMob) {
-        const AdMob = window.Capacitor.Plugins.AdMob;
+    // Check if running in a native Capacitor app with Unity Ads installed
+    if (window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.UnityAds) {
+        const UnityAds = window.Capacitor.Plugins.UnityAds;
         const App = window.Capacitor.Plugins.App;
         
-        // 🚨 USING GOOGLE'S TEST ID FIRST TO VERIFY IT WORKS 🚨
-        // Once this test ad appears on your screen, change this back to your real ID: ca-app-pub-1536423251414270/6264893150
-        const appOpenAdId = 'ca-app-pub-3940256099942544/9257395921'; 
+        // 🚨 REPLACE THESE WITH THE IDs FROM YOUR UNITY DASHBOARD 🚨
+        const GAME_ID = '1234567'; // Your 7-digit Android Game ID
+        const AD_UNIT_ID = 'Interstitial_Android'; // Your Ad Unit / Placement ID
 
         try {
-            // Initialize AdMob
-            await AdMob.initialize({
-                initializeForTesting: true // Helps force ads to show during development
+            // 1. Initialize Unity Ads
+            await UnityAds.initialize({
+                gameId: GAME_ID,
+                testMode: true // IMPORTANT: Set this to false when you publish to the Play Store!
             });
 
-            // LISTENERS: Wait for the ad to actually finish downloading over the internet!
-            AdMob.addListener('appOpenAdLoaded', () => {
-                // The ad is fully downloaded! Now we can safely show it.
-                AdMob.showAppOpen();
-            });
+            // 2. Helper function to safely load and show the ad
+            const showUnityAd = async () => {
+                try {
+                    // Tell Unity to fetch an ad from the internet
+                    await UnityAds.loadInterstitial({ placementId: AD_UNIT_ID });
+                    
+                    // Wait for the ad to finish downloading, checking every half-second
+                    let attempts = 0;
+                    const checkLoad = setInterval(async () => {
+                        attempts++;
+                        const { loaded } = await UnityAds.isInterstitialLoaded();
+                        
+                        if (loaded) {
+                            clearInterval(checkLoad);
+                            await UnityAds.showInterstitial(); // Show the ad!
+                        } else if (attempts > 10) {
+                            clearInterval(checkLoad); // Stop trying if it takes longer than 5 seconds
+                        }
+                    }, 500);
+                } catch (err) {
+                    console.log("Unity Ad Load Error:", err);
+                }
+            };
 
-            AdMob.addListener('appOpenAdFailedToLoad', (err) => {
-                console.error("AdMob Failed to load the ad from the internet:", err);
-            });
+            // 3. Request the very first ad when the app opens
+            showUnityAd();
 
-            // Request the very first ad
-            await AdMob.prepareAppOpen({
-                adId: appOpenAdId,
-                orientationType: 'PORTRAIT' 
-            });
-
-            // Listen for the app resuming from the background
+            // 4. Listen for the app resuming from the background
             if (App) {
-                App.addListener('appStateChange', async (state) => {
-                    // If the app becomes active again, request a new ad. 
-                    // (The 'appOpenAdLoaded' listener above will automatically show it when it's ready!)
+                App.addListener('appStateChange', (state) => {
+                    // If the app becomes active again, show a new ad
                     if (state.isActive) {
-                        await AdMob.prepareAppOpen({ 
-                            adId: appOpenAdId, 
-                            orientationType: 'PORTRAIT' 
-                        });
+                        showUnityAd();
                     }
                 });
             }
         } catch (error) {
-            console.error("AdMob Initialization Error:", error);
+            console.error("Unity Ads Initialization Error:", error);
         }
     }
 });
